@@ -15,16 +15,19 @@ PDF is still better for vector/markup based "ebooks" so this plugin will not try
 Installation
 ---
 1. Right click the preferences button in calibre, select get new plugins, scroll down the list and choose the DjVuMaker plugin to install
-   * Or, download the zip and install it from the shell  
-```wget https://github.com/kfix/calibre_plugin_djvumaker/archive/master.zip  
+   * Or, download the zip and install it from the shell
 
-calibre-customize -b master.zip```
-   * Or++, clone this repo and install from source  
-```git clone github.com/kfix/calibre-plugin-djvumaker 
- 
-cd calibre-plugin-djvumaker
+     ````bash
+   wget https://github.com/kfix/calibre_plugin_djvumaker/archive/master.zip
+   calibre-customize -b master.zip
+     ````
+   * Or++, clone this repo and install from source
 
-./__init__.py```
+     ````bash
+   git clone github.com/kfix/calibre-plugin-djvumaker
+   cd calibre-plugin-djvumaker
+   ./__init__.py
+     ````
 2. [Required] Build the conversion programs (**fixme: works only on OSX**)  
 ```calibre-debug -R djvumaker install_deps``` 
 3. [Optional] run a test conversion out-of-GUI against the included PDF.  
