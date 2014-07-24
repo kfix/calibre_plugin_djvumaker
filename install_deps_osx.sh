@@ -1,6 +1,7 @@
 #!/bin/sh
 ! (which brew >/dev/null) && echo "Homebrew required. Please visit http://github.com/Homebrew/homebrew" && exit 1
 brew install --with-djvu ghostscript
+brew install poppler #need pdfimages
 while read -p "Install DjView.app? (y/n): " input; do
 	! [ "$input" == "y" ] && break
 	brew install caskroom/cask/brew-cask
