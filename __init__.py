@@ -11,7 +11,9 @@ PLUGINNAME = 'djvumaker' # Name of the plugin
 if __name__ == '__main__':
     import os, sys
     os.system("calibre-customize -b %s" % os.path.dirname(os.path.abspath(__file__)))
-    print 'plugin installed. test & debug with: `calibre-debug -r djvumaker -- test.pdf`'
+    print 'plugin installed.'
+    print 'install support programs with: `calibre-debug -r djvumaker install_deps`'
+    print 'test & debug with: `calibre-debug -r djvumaker -- test.pdf`'
     sys.exit()
 
 import errno, os, sys, subprocess, traceback
@@ -141,7 +143,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     description         = 'Convert raster-based document files (Postscript, PDF) to DJVU with GUI button and on-import'
     supported_platforms = ['linux', 'osx', 'windows'] # Platforms this plugin will run on
     author              = 'Joey Korkames' # The author of this plugin
-    version             = (1, 0, 0)   # The version number of this plugin
+    version             = (1, 0, 1)   # The version number of this plugin
     file_types          = set(['pdf','ps', 'eps']) # The file types that this plugin will be automatically applied to
     on_postimport       = True # Run this plugin after books are addded to the database
     minimum_calibre_version = (1, 0, 0) #needs the new db api and id bugfix
@@ -173,7 +175,14 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                  continue
 	elif id_or_path == "install_deps":
 	   if isosx:
-	      os.system("install_deps_osx.sh") #hmm, need to extract this from the self.plugin_path zipfile
+	      if os.system("which brew >/dev/null") == 0:
+                 os.system("brew install --with-djvu ghostscript; brew install poppler")
+	      else:
+	         print "Homebrew required. Please visit http://github.com/Homebrew/homebrew"
+		 return False
+              if raw_input("Install DjView.app? (y/n): ") == 'y':
+                 os.system("brew install caskroom/cask/brew-cask; brew cask install djview")
+   	         #need a cask for the caminova finder/safari plugin too
 	   #todo: make more install scripts
 	   elif islinux: raise
 	   elif iswindows: raise
