@@ -5,15 +5,12 @@ __license__ = 'GPL 3'
 __copyright__ = '2014, Joey Korkames <github.com/kfix>'
 __docformat__ = 'restructuredtext en'
 
-PLUGINNAME = 'djvumaker' # Name of the plugin
+PLUGINNAME = 'djvumaker'
+PLUGINVER = (1,0,0)
 
-#run this file directly to self-install the plugins to calibre
 if __name__ == '__main__':
-    import os, sys
-    os.system("calibre-customize -b %s" % os.path.dirname(os.path.abspath(__file__)))
-    print 'plugin installed.'
-    print 'install support programs with: `calibre-debug -r djvumaker install_deps`'
-    print 'test & debug with: `calibre-debug -r djvumaker -- test.pdf`'
+    import sys
+    sys.stdout.write(".".join(str(i) for i in PLUGINVER)) #Makefile needs this to do releases
     sys.exit()
 
 import errno, os, sys, subprocess, traceback
@@ -143,7 +140,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     description         = 'Convert raster-based document files (Postscript, PDF) to DJVU with GUI button and on-import'
     supported_platforms = ['linux', 'osx', 'windows'] # Platforms this plugin will run on
     author              = 'Joey Korkames' # The author of this plugin
-    version             = (1, 0, 1)   # The version number of this plugin
+    version             = PLUGINVER   # The version number of this plugin
     file_types          = set(['pdf','ps', 'eps']) # The file types that this plugin will be automatically applied to
     on_postimport       = True # Run this plugin after books are addded to the database
     minimum_calibre_version = (1, 0, 0) #needs the new db api and id bugfix
@@ -163,8 +160,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 	   self.postimport(id_or_path, fmt)
 	elif id_or_path == "convert_all":
 	   '`calibre-debug -r djvumaker convert_all`'
-	   prints("Copy-convert all PDFs to DJVU? (press CTRL+C to abort)")
-           icl_user = raw_input('')
+	   prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
+           raw_input('')
 	   from calibre.library import db
            db = db() # initialize calibre library database
            for book_id in list(db.all_ids()):
