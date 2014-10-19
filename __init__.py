@@ -91,9 +91,11 @@ def djvudigital(srcdoc, cmdflags=[], log=None):
     bookname = os.path.splitext(os.path.basename(srcdoc))[0]
     with PersistentTemporaryFile(bookname + '.djvu') as djvu: #note, PTF() is from calibre
          try:
+             env = os.environ
              cmd = ['djvudigital'] + cmdflags + [srcdoc, djvu.name]
+             if isosx: env['PATH'] = "/usr/local/bin:" + env['PATH'] # Homebrew
              prints('%s: subprocess: %s' % (PLUGINNAME, cmd))
-	     proc = subprocess.Popen(cmd, bufsize=cmdbuf, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) #stderr:csepdjvu, stdout: ghostscript & djvudigital
+	     proc = subprocess.Popen(cmd, env=env, bufsize=cmdbuf, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) #stderr:csepdjvu, stdout: ghostscript & djvudigital
 	     if cmdbuf > 0: #stream the output
 	        while proc.poll() is None: prints(proc.stdout.readline())
 	        for line in proc.stdout.read().split('\n'): prints(line) #remainder of post-polled buffer 
@@ -117,13 +119,17 @@ def is_rasterbook_pdfimages(path):
     #^^need to get poppler-utils' pdfimages added to calibre makefile
     # http://cgit.freedesktop.org/poppler/poppler/tree/utils/pdfimages.cc
     try:
-        pdfimages = subprocess.check_output(["pdfimages", "-f", "2", "-l", "30", "-q", "-list", path]) #use pages 2-30 for the test, don't waste time parsing giant pdfs
+        if isosx:
+           cmd = "/usr/local/bin/pdfimages" # Homebrew
+        else:
+           cmd = "pdfimages"
+        pdfimages = subprocess.check_output([cmd, "-f", "2", "-l", "30", "-q", "-list", path]) #use pages 2-30 for the test, don't waste time parsing giant pdfs
         pdfimages = [l for l in pdfimages.splitlines()[2:] if l.split()[2] == 'image'] #filter out real rgb images from masks and other weird entities
         if len(pdfimages) > 0: #we found actual rasters in the PDF
            is_raster = reduce(lambda p,i: p - i < 5, [int(i) for i in pdfimages.pop().split()[:2]]) #get the page# & image# of last obj scanned, cmp them +/- 5
     except OSError as e:
         if e.errno == errno.ENOENT:
-            prints('%s: $PATH[%s]/pdfimages not available: you may need to install poppler-utils' % (PLUGINNAME, os.environ['PATH']))
+            prints('%s: $PATH[%s]/pdfimages not available: poppler-utils must be installed' % (PLUGINNAME, os.environ['PATH']))
             prints(traceback.format_exc())
             raise #ConversionError
     except subprocess.CalledProcessError as e:
