@@ -26,9 +26,9 @@ release: $(ZIP)
 	echo "Plugin now available for download at $$dload"
 	#update attachment @ http://www.mobileread.com/forums/showthread.php?p=2881112#post2881112
 clean:
-	rm *.zip
+	-rm *.zip
 
-test:   $(ZIP)
+test: $(ZIP)
 	calibre-customize -a $(ZIP)
 	calibre-debug -r djvumaker test.pdf
 

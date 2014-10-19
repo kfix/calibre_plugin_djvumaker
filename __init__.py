@@ -6,7 +6,7 @@ __copyright__ = '2014, Joey Korkames <github.com/kfix>'
 __docformat__ = 'restructuredtext en'
 
 PLUGINNAME = 'djvumaker'
-PLUGINVER = (1,0,0)
+PLUGINVER = (1,0,1)
 
 if __name__ == '__main__':
     import sys
@@ -102,7 +102,7 @@ def djvudigital(srcdoc, cmdflags=[], log=None):
 	     prints('%s: subprocess returned %s' % (PLUGINNAME, proc.returncode))
          except OSError as e:
              if e.errno == errno.ENOENT:
-                 prints('%s: $PATH[%s]/djvudigital not available: you may need to install djvu' % (self.name, os.environ['PATH']))
+                 prints('%s: $PATH[%s]/djvudigital script not available to perform conversion: djvulibre must be installed' % (PLUGINNAME, os.environ['PATH']))
              return False
      
          if proc.returncode != 0: return False #10 djvudigital shell/usage error
@@ -123,7 +123,7 @@ def is_rasterbook_pdfimages(path):
            is_raster = reduce(lambda p,i: p - i < 5, [int(i) for i in pdfimages.pop().split()[:2]]) #get the page# & image# of last obj scanned, cmp them +/- 5
     except OSError as e:
         if e.errno == errno.ENOENT:
-            prints('%s: $PATH[%s]/pdfimages not available: you may need to install poppler-utils' % (self.name, os.environ['PATH']))
+            prints('%s: $PATH[%s]/pdfimages not available: you may need to install poppler-utils' % (PLUGINNAME, os.environ['PATH']))
             prints(traceback.format_exc())
             raise #ConversionError
     except subprocess.CalledProcessError as e:
