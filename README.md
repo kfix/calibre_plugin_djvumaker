@@ -6,9 +6,10 @@ Files can be converted through a GUI menu and optionally as FileType hook for au
 ![GUI menu](/screenshot_menu.png?raw=true)
 ![Job log](/screenshot_job.png?raw=true)
 
-DjVU files are best for rendering large image-based documents (100+ pg. black-and-white-scaned archive-books) on markup-ebook readers with sub-300MiB memory and sub-2GiB storage capacities.  
-The community-made Kindle readers kindlepdfviewer & koreader support DjVu files and can deliver noticable speed increase over PDF originals of such documents.  
-Some massive 1000+ page books can only be read unsplit on these devices in DjVu format.  
+DjVU format is ideal for reading large black & white scanned Google Books on E-Readers with >300MB RAM and >2GB flash.
+Big 100+ page books scanned into PDF format usually slow these devices' built-in software to a halt.
+
+To read DJVU files on the Kindle, I suggest koreader/koreader.
 
 PDF is still better for vector/markup based "ebooks" so this plugin will not try to convert documents it detects having less than 1 raster image per page.  
 
@@ -25,6 +26,8 @@ Installation
 2. [Required] Build the conversion programs (**fixme: works only on OSX**)  
 ```calibre-debug -R djvumaker install_deps``` 
 3. (Re)start Calibre and start converting your PDF books!  
+
+4. [Optional] go to Preferences -> Interface::Toolbars so you can place the DJVU menu where you see fit.
 
 Under the Hood
 ---

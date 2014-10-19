@@ -17,7 +17,7 @@ class ConvertToDJVUAction(InterfaceAction):
     action_spec = (_('Convert to DJVU'), 'mimetypes/djvu.png', _('engage the djvumaker plugin on this book'), None)
     #  (label, icon_path, tooltip, keyboard shortcut)
 
-    action_type = 'current'
+    action_type = 'global'
 
     #don't auto-add the button to any menus' top-level
     dont_add_to = frozenset(['toolbar', 'toolbar-device', 'context-menu',
@@ -27,12 +27,15 @@ class ConvertToDJVUAction(InterfaceAction):
     def genesis(self):
 	self.qaction.triggered.connect(self.convert_book)
 
-    def gui_layout_complete(self):
-	#append my top-level DJVU action to the built-in conversion menus
-	#https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/actions/convert.py
+    #def gui_layout_complete(self):
+    def initialization_complete(self):
+	# append my top-level DJVU action to the built-in conversion menus
+	# https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/actions/convert.py
+	# https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/__init__.py#L26
 	cb = self.gui.iactions['Convert Books']
         cm = partial(cb.create_menu_action, cb.qaction.menu()) 
 	cm('convert-djvu-cvtm', _('Convert to DJVU'), icon=self.qaction.icon(), triggered=self.convert_book)
+	cb.qaction.setMenu(cb.qaction.menu())
 
     def location_selected(self, loc):
         # Currently values for loc are: ``library, main, card and cardb``.
