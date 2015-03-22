@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 __license__ = 'GPL 3'
-__copyright__ = '2014, Joey Korkames <github.com/kfix>'
+__copyright__ = '2015, Joey Korkames <http://github.com/kfix>'
 __docformat__ = 'restructuredtext en'
 
 PLUGINNAME = 'djvumaker'
-PLUGINVER = (1,0,1)
+PLUGINVER = (1,0,2)
 
 if __name__ == '__main__':
     import sys
@@ -20,8 +20,7 @@ from calibre.constants import (isosx, iswindows, islinux, isbsd)
 from calibre.utils.ipc.simple_worker import fork_job, WorkerError
 from calibre import force_unicode, prints
 from calibre.ptempfile import PersistentTemporaryFile
-#from calibre.ebooks.pdf.pdftohtml import PDFTOHTML
-#from xml.dom.minidom import parse, parseString
+from calibre.utils.podofo import get_podofo
 
 from calibre.customize import FileTypePlugin, InterfaceActionBase
 
@@ -111,33 +110,17 @@ def djvudigital(srcdoc, cmdflags=[], log=None):
 
          return djvu.name
 
-def is_rasterbook_pdfimages(path):
+def is_rasterbook(path):
     '''identify whether this is a raster doc (ie. a scan) or a digitally authored text+graphic doc. skip conversion if source doc is not mostly raster-image based
     ascertain this by checking whether there are as many image objects in the PDF as there are pages +/- 5 (google books and other scanners add pure-text preambles to their pdfs)'''
-    is_raster = False
-    #from calibre.ebooks.pdf.pdftohtml import PDFTOHTML
-    #^^need to get poppler-utils' pdfimages added to calibre makefile
-    # http://cgit.freedesktop.org/poppler/poppler/tree/utils/pdfimages.cc
-    try:
-        if isosx:
-           cmd = "/usr/local/bin/pdfimages" # Homebrew
-        else:
-           cmd = "pdfimages"
-        pdfimages = subprocess.check_output([cmd, "-f", "2", "-l", "30", "-q", "-list", path]) #use pages 2-30 for the test, don't waste time parsing giant pdfs
-        pdfimages = [l for l in pdfimages.splitlines()[2:] if l.split()[2] == 'image'] #filter out real rgb images from masks and other weird entities
-        if len(pdfimages) > 0: #we found actual rasters in the PDF
-           is_raster = reduce(lambda p,i: p - i < 5, [int(i) for i in pdfimages.pop().split()[:2]]) #get the page# & image# of last obj scanned, cmp them +/- 5
-    except OSError as e:
-        if e.errno == errno.ENOENT:
-            prints('%s: $PATH[%s]/pdfimages not available: poppler-utils must be installed' % (PLUGINNAME, os.environ['PATH']))
-            prints(traceback.format_exc())
-            raise #ConversionError
-    except subprocess.CalledProcessError as e:
-        prints('%s: subprocess failed with return code %d:\n\t%s\n' % (self.name, e.returncode, ' '.join(e.cmd), e.output))
-        prints(traceback.format_exc())
-        raise #ConversionError
-
-    return is_raster
+    podofo = get_podofo()
+    pdf = podofo.PDFDoc()
+    pdf.open(path)
+    pages = pdf.page_count()
+    images = pdf.image_count()
+    prints("%s: pages(%s) : images(%s) > %s" % (PLUGINNAME, pages, images, path))
+    if pages > 0: return abs(pages - images) <= 5
+    return False
 
 # -- Calibre Plugin class --
 
@@ -149,7 +132,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     version             = PLUGINVER   # The version number of this plugin
     file_types          = set(['pdf','ps', 'eps']) # The file types that this plugin will be automatically applied to
     on_postimport       = True # Run this plugin after books are addded to the database
-    minimum_calibre_version = (1, 0, 0) #needs the new db api and id bugfix
+    minimum_calibre_version = (2, 22, 0) #needs the new db api w/id() bugfix, and podofo.image_count()
     actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' #InterfaceAction plugin location
 
     def customization_help(self, gui=False):
@@ -192,7 +175,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 	   elif isbsd: raise
         else: 
 	   '`calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)'
-	   if is_rasterbook_pdfimages(id_or_path):
+	   if is_rasterbook(id_or_path):
 	      djvu = djvudigital(id_or_path)
 	      if djvu:
   	        prints("\n\nopening djvused in subshell, press Ctrl+D to exit and delete '%s'\n\n" % djvu)
@@ -230,7 +213,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 	path_to_ebook = db.format_abspath(book_id, book_format, index_is_id=True)
 	
 	if book_format == 'pdf':
-           if is_rasterbook_pdfimages(path_to_ebook):
+           if is_rasterbook(path_to_ebook):
 	        pass #should add a 'scanned' or 'djvumaker' tag
 	   else:
 		#this is a marked-up/vector-based pdf, no advantages to having another copy in DJVU format
