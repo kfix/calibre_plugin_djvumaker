@@ -162,7 +162,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 	elif id_or_path == "install_deps":
 	   if isosx:
 	      if os.system("which brew >/dev/null") == 0:
-                 os.system("brew install --with-djvu ghostscript; brew install poppler")
+                 os.system("brew install --with-djvu ghostscript")
 	      else:
 	         print "Homebrew required. Please visit http://github.com/Homebrew/homebrew"
 		 return False

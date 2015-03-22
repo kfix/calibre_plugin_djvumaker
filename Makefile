@@ -19,12 +19,19 @@ tag:
 $(ZIP): tag
 	git archive --format=zip --output=$@ v$(VERSION) *.py *.txt
 
+ifneq ($(GITHUB_ACCESS_TOKEN),)
 release: $(ZIP)
 	git push -f --tags
 	posturl=$$(curl --data $(GH_RELEASE_JSON) "https://api.github.com/repos/$(USER)/$(REPO)/releases?access_token=$(GITHUB_ACCESS_TOKEN)" | jq -r .upload_url | sed 's/[\{\}]//g') && \
 	dload=$$(curl --fail -X POST -H "Content-Type: application/gzip" --data-binary "@$(ZIP)" "$$posturl=$(ZIP)&access_token=$(GITHUB_ACCESS_TOKEN)" | jq -r .browser_download_url | sed 's/[\{\}]//g') && \
 	echo "Plugin now available for download at $$dload"
 	#update attachment @ http://www.mobileread.com/forums/showthread.php?p=2881112#post2881112
+else
+release:
+	@echo You need to export \$$GITHUB_ACCESS_TOKEN to make a release!
+	@exit 1
+endif
+
 clean:
 	-rm *.zip
 
