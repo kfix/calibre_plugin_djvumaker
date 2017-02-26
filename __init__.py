@@ -1,4 +1,3 @@
-#disable=C
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 from __future__ import (unicode_literals, division, absolute_import,
@@ -19,13 +18,31 @@ if __name__ == '__main__':
 
 import errno, os, sys, subprocess, traceback, argparse
 from functools import partial, wraps
-from calibre.ebooks import ConversionError
-from calibre.constants import (isosx, iswindows, islinux, isbsd)
-from calibre.utils.ipc.simple_worker import fork_job, WorkerError
+
 from calibre import force_unicode, prints
+from calibre.ebooks import ConversionError
 from calibre.ptempfile import PersistentTemporaryFile
-from calibre.utils.podofo import get_podofo
 from calibre.customize import FileTypePlugin, InterfaceActionBase
+from calibre.constants import (isosx, iswindows, islinux, isbsd)
+from calibre.utils.config import JSONConfig
+from calibre.utils.podofo import get_podofo
+from calibre.utils.ipc.simple_worker import fork_job, WorkerError
+
+WORKING_BACKENDS = ['pdf2djvu', 'djvudigital']
+# Set default preferences
+DEFAULT_STORE_VALUES = {
+    'use_backend': 'djvudigital',
+    'djvudigital' : {
+        'flags' : []
+    },
+    'pdf2djvu' : {
+        'flags' : []
+    }
+}
+# This is where all preferences for this plugin will be stored
+plugin_prefs = JSONConfig(os.path.join('plugins', PLUGINNAME))
+plugin_prefs.defaults['Options'] = DEFAULT_STORE_VALUES
+# TODO: can we move this inside plugin class?
 
 if iswindows and hasattr(sys, 'frozen'):
     # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
@@ -162,13 +179,13 @@ def is_rasterbook(path):
         # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/podofo/doc.cpp#L146
         images = pdf.image_count()
     except:
-        from inspect import getmodule
+        import inspect
         error_info = sys.exc_info()
         prints("{}: Unexpected error: {}".format(PLUGINNAME, error_info))
-        prints("{}: from module: {}".format(PLUGINNAME, getmodule(error_info[0])))
+        prints("{}: from module: {}".format(PLUGINNAME, inspect.getmodule(error_info[0])))
 
         # reraise exception if other exception than podofo.Error
-        # str comparision because of problem with importing cpp Error
+        # str comparison because of problem with importing cpp Error
         if object.__str__(error_info[0]) != "<class 'podofo.Error'>":
             raise
         else:
@@ -243,6 +260,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         options.func(options)
             
     def cli_backend(self, args):
+        print(plugin_prefs['Options'])
         if args.command == 'install':
             self.cli_install_backend(args)
         elif args.command == 'set':
@@ -272,7 +290,18 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             raise Exception('Backend not recognized.')
 
     def cli_set_backend(self, args):
-        print(args.backend)
+        if args.backend in WORKING_BACKENDS:
+            new_prefs = DEFAULT_STORE_VALUES
+            new_prefs['use_backend'] = args.backend
+            plugin_prefs['Options'] = new_prefs
+            # TODO: something like below, but better
+                # def set_new_prefs(key, value):
+                #     '''Unsafe function, based on GLOBAL vars'''
+                #     new_prefs = DEFAULT_STORE_VALUES
+                #     new_prefs[key] = value
+                #     plugin_prefs['Options'] = new_prefs
+        else:
+            raise Exception('Backend not recognized.')
         return None
     
     def cli_convert(self, args):
@@ -294,9 +323,14 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         elif args.path is not None:
             print('path')
             return NotImplemented
-            if is_rasterbook(id_or_path):
+            if is_rasterbook(args.path):
                 '`calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)'
-                djvu = djvudigital(id_or_path)
+                if plugin_prefs['Options']['use_backend'] == 'djvudigital':
+                    djvu = djvudigital(args.path)
+                elif plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
+                    djvu = pdf2djvu(args.path)
+                # TODO: make function from this, to start good backend, maybe second decorator?
+                
                 if djvu:
                     prints("\n\nopening djvused in subshell, press Ctrl+D to exit and delete\
                      '%s'\n\n" % djvu)
@@ -354,6 +388,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 
             cmdflags = []
             if self.site_customization is not None: cmdflags.extend(self.site_customization.split())
+            # TODO: change site_customization
+
             #`--gsarg=-dFirstPage=1,-dLastPage=1` how to limit page range
             #more gsargs: https://leanpub.com/pdfkungfoo
 
@@ -397,9 +433,11 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     #elif hasattr(self, gui): #if we have the calibre gui running,
     # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
-            print("Starts djvudigital")
-            djvu = djvudigital(path_to_ebook, cmdflags, log)
-            # djvu = pdf2djvu(path_to_ebook, cmdflags, log)
+            print("Starts backend")
+            if plugin_prefs['Options']['use_backend'] == 'djvudigital':
+                djvu = djvudigital(path_to_ebook, cmdflags, log)
+            elif plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
+                djvu = pdf2djvu(path_to_ebook, cmdflags, log)
 
         if djvu:
             db.new_api.add_format(book_id, 'DJVU', djvu, run_hooks=True)
