@@ -26,7 +26,7 @@ from calibre.customize import FileTypePlugin, InterfaceActionBase
 from calibre.constants import (isosx, iswindows, islinux, isbsd)
 from calibre.utils.config import JSONConfig
 from calibre.utils.podofo import get_podofo
-from calibre.utils.ipc.simple_worker import fork_job, WorkerError
+from calibre.utils.ipc.simple_worker import fork_job as worker_fork_job, WorkerError
 
 if iswindows and hasattr(sys, 'frozen'):
     # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
@@ -47,43 +47,40 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     on_postimport       = True # Run this plugin after books are addded to the database
     minimum_calibre_version = (2, 22, 0) #needs the new db api w/id() bugfix, and podofo.image_count()
     actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' #InterfaceAction plugin location
-    WORKING_BACKENDS = set()
+    REGISTERED_BACKENDS = {}
 
+    
 
     def __init__(self, *args, **kwargs):
         super(DJVUmaker, self).__init__(*args, **kwargs)
-        # WORKING_BACKENDS = ['pdf2djvu', 'djvudigital']
+        # REGISTERED_BACKENDS = ['pdf2djvu', 'djvudigital']
         # Set default preferences
-        self.DEFAULT_STORE_VALUES = {}
-        for item in self.WORKING_BACKENDS:
-            self.DEFAULT_STORE_VALUES[item] = {'flags' : []}
-        if 'djvudigital' in self.WORKING_BACKENDS:
-            self.DEFAULT_STORE_VALUES['use_backend'] = 'djvudigital'
+        DEFAULT_STORE_VALUES = {}
+        DEFAULT_STORE_VALUES['installed'] = []
+        for item in self.REGISTERED_BACKENDS:
+            DEFAULT_STORE_VALUES[item] = {'flags' : [], 'installed' : False}
+        if 'djvudigital' in self.REGISTERED_BACKENDS:
+            DEFAULT_STORE_VALUES['use_backend'] = 'djvudigital'
         else:
             raise Exception('No djvudigital backend.')
 
-        # def convert_pdf(srcdoc, cmdflags):
-        #     if plugin_prefs['Options']['use_backend'] == 'djvudigital':
-        #         djvu = djvudigital(args.path)
-        #     elif plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
-        #         djvu = pdf2djvu(args.path)
-        # self.DEFAULT_STORE_VALUES 
-        # DEFAULT_STORE_VALUES = {
-        #     'use_backend': 'djvudigital',
-        #     'djvudigital' : {
-        #         'flags' : []
-        #     },
-        #     'pdf2djvu' : {
-        #         'flags' : []
-        #     }
-        # }
-        # This is where all preferences for this plugin will be stored
         self.plugin_prefs = JSONConfig(os.path.join('plugins', PLUGINNAME))
-        self.plugin_prefs.defaults['Options'] = self.DEFAULT_STORE_VALUES
+        self.plugin_prefs.defaults = DEFAULT_STORE_VALUES
+
+        # make sure to create plugins/djvumaker.json
+        # self.plugin_prefs.values() deosn't use self.plugin_prefs.__getitem__()
+        # and returns real json not defaults
+        if not self.plugin_prefs.values():
+            for key, val in DEFAULT_STORE_VALUES.iteritems():
+                self.plugin_prefs[key] = val
+
+    def run_backend(self, *args, **kwargs):
+        use_backend = self.plugin_prefs['use_backend']
+        return self.REGISTERED_BACKENDS[use_backend](*args, **kwargs)
 
     @classmethod
     def register_backend(cls, fun):
-        cls.WORKING_BACKENDS.add(fun.__name__)
+        cls.REGISTERED_BACKENDS[fun.__name__] = fun
         return fun
 
     def customization_help(self, gui=False):
@@ -96,7 +93,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     def cli_main(self, args):
         '''Handles plugin cli interface'''
         args = args[1:] # args[0] = PLUGINNAME
-        prints(args) # DEBUG
+        prints('cli_main enter: args: ', args) # DEBUG
         
         parser = argparse.ArgumentParser(prog="calibre-debug -r {} -- ".format(PLUGINNAME))
         parser.add_argument('-V', '--version', action='version', version='v{}'.format(PLUGINVER_DOT),
@@ -109,7 +106,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         parser_backend.add_argument('command', choices=['install', 'set'],
                                     help='installs or sets backend')
         parser_backend.add_argument('backend', choices=['djvudigital', 'pdf2djvu'],
-                                         help='choosed backend')
+                                         help='choosed backend', nargs="?")
 
         parser_convert = subparsers.add_parser('convert', help='Convert file to djvu')
         parser_convert.set_defaults(func=self.cli_convert)
@@ -137,7 +134,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         options.func(options)
             
     def cli_backend(self, args):
-        print(self.plugin_prefs['Options'])
+        print('cli_backend enter: plugin_prefs:', self.plugin_prefs)
         if args.command == 'install':
             self.cli_install_backend(args)
         elif args.command == 'set':
@@ -146,37 +143,47 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             raise Exception('Command not recognized.')
 
     def cli_install_backend(self, args):
-        print(args.backend)
+        print('cli_install_backend enter: args.backend:', args.backend)
+        if not args.backend:
+            installed_backend = [k for k, v in {
+                    item : self.plugin_prefs[item]['installed'] for item in self.REGISTERED_BACKENDS
+                    }.iteritems() if v]
+            print('Currently installed backends: {}'.format( 
+                ', '.join(installed_backend) if installed_backend else 'None'))
+            sys.exit()
+
         if args.backend == 'djvudigital':
             if isosx:
                 if os.system("which brew >/dev/null") == 0:
                     os.system("brew install --with-djvu ghostscript")
                 else:
-                    print("Homebrew required. Please visit http://github.com/Homebrew/homebrew")
-                    return False
-                if raw_input("Install DjView.app? (y/n): ") == 'y':
+                    raise Exception("Homebrew required."
+                                    "Please visit http://github.com/Homebrew/homebrew")
+                if raw_input("Install DjView.app? (y/n): ").lower() == 'y':
                     os.system("brew install caskroom/cask/brew-cask; brew cask install djview")
+                else:
+                    sys.exit()
             #need a cask for the caminova finder/safari plugin too
             #todo: make more install scripts
             elif islinux: raise Exception('Only macOS supported')
             elif iswindows: raise Exception('Only macOS supported')
             elif isbsd: raise Exception('Only macOS supported')
+            self.plugin_prefs['djvudigital']['installed'] = True
+            self.plugin_prefs.commit() # always use commit if uses nested dict
         elif args.backend == 'pdf2djvu':
-            raise NotImplementedError
+            # raise NotImplementedError
+            self.plugin_prefs['pdf2djvu']['installed'] = True
+            self.plugin_prefs.commit()
         else:
             raise Exception('Backend not recognized.')
 
     def cli_set_backend(self, args):
-        if args.backend in self.WORKING_BACKENDS:
-            new_prefs = self.DEFAULT_STORE_VALUES
-            new_prefs['use_backend'] = args.backend
-            self.plugin_prefs['Options'] = new_prefs
-            # TODO: something like below, but better
-                # def set_new_prefs(key, value):
-                #     '''Unsafe function, based on GLOBAL vars'''
-                #     new_prefs = DEFAULT_STORE_VALUES
-                #     new_prefs[key] = value
-                #     plugin_prefs['Options'] = new_prefs
+        if not args.backend:
+            print('Currently set backend: {}'.format(self.plugin_prefs['use_backend']))
+            sys.exit()
+
+        if args.backend in self.REGISTERED_BACKENDS:
+            self.plugin_prefs['use_backend'] = args.backend
         else:
             raise Exception('Backend not recognized.')
         return None
@@ -185,7 +192,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         print(args)
         if args.all:
             print('in all')
-            return NotImplemented
+            # return NotImplemented
             '`calibre-debug -r djvumaker convert_all`'
             prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
             raw_input('')
@@ -202,10 +209,11 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             return NotImplemented
             if is_rasterbook(args.path):
                 '`calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)'
-                if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
-                    djvu = djvudigital(args.path)
-                elif self.plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
-                    djvu = pdf2djvu(args.path)
+                djvu = self.run_backend(args.path)
+                # if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
+                #     djvu = djvudigital(args.path)
+                # elif self.plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
+                #     djvu = pdf2djvu(args.path)
                 # TODO: make function from this, to start good backend, maybe second decorator?
                 
                 if djvu:
@@ -220,9 +228,9 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     os.system("djvused -v '%s'" % djvu)
         elif args.id is not None:   
             print('in id')   
-            return NotImplemented    
+            # return NotImplemented    
             '`calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)'
-            self.postimport(args.id, fmt) #bookid and?            
+            self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong            
 
     # -- calibre filetype plugin mandatory methods --
     def run(self, path_to_ebook):
@@ -277,10 +285,11 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             #https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/ipc/simple_worker.py #dispatch API for Worker()
             #src/calibre/utils/ipc/launch.py #Worker() uses sbp.Popen to
             # run a second Python to a logfile
-            #note that Calibre bungs the python loader to check the plugin directory when
+            # note that Calibre bungs the python loader to check the plugin directory when
             # modules with calibre_plugin. prefixed are passed
             #https://github.com/kovidgoyal/calibre/blob/master/src/calibre/customize/zipplugin.py#L192
-                jobret = fork_job('calibre_plugins.%s' % self.name, 'djvudigital',
+                func_name = self.plugin_prefs['Options']['use_backend']
+                jobret = worker_fork_job('calibre_plugins.%s' % self.name, func_name,
                                   args=[path_to_ebook, cmdflags, log],
                                   kwargs={},
                                   env={'PATH': os.environ['PATH'] + ':/usr/local/bin'},
@@ -310,11 +319,12 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     #elif hasattr(self, gui): #if we have the calibre gui running,
     # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
-            print("Starts backend")
-            if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
-                djvu = djvudigital(path_to_ebook, cmdflags, log)
-            elif self.plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
-                djvu = pdf2djvu(path_to_ebook, cmdflags, log)
+            print("Starts backend")            
+            djvu = self.run_backend(path_to_ebook, cmdflags, log)
+            # if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
+            #     djvu = djvudigital(path_to_ebook, cmdflags, log)
+            # elif self.plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
+            #     djvu = pdf2djvu(path_to_ebook, cmdflags, log)
 
         if djvu:
             db.new_api.add_format(book_id, 'DJVU', djvu, run_hooks=True)
@@ -431,16 +441,29 @@ def job_handler(fun):
 # -- DJVU conversion utilities wrapper functions -- see
 # http://en.wikisource.org/wiki/User:Doug/DjVu_Files
 
+class NotSupportedFiletype(Exception):
+    '''Exception to handle not supported filetypes by backend.'''
+    pass
+
+def raise_if_not_supported(srcdoc, supported_extensions):
+    '''Checks if file extension is on supported extensions list'''
+    file_ext = os.path.splitext(srcdoc)[1].lower().lstrip('.')
+    if file_ext not in supported_extensions:
+        raise NotSupportedFiletype('This backend supports only {} files, but get {}.'.format(
+            ', '.join(['.' + item for item in supported_extensions]), '.'+file_ext))
+
 @DJVUmaker.register_backend
 @job_handler
 def pdf2djvu(srcdoc, cmdflags, djvu):
     '''pdf2djvu backend shell command generation'''
+    raise_if_not_supported(srcdoc, ['pdf'])
     return ['pdf2djvu'] + ['-o', djvu.name, srcdoc] # command passed to subprocess
 
 @DJVUmaker.register_backend
 @job_handler
 def djvudigital(srcdoc, cmdflags, djvu):
-    '''djvudigital backend shell command generation'''
+    '''djvudigital backend shell command generation'''    
+    raise_if_not_supported(srcdoc, ['pdf', 'ps'])
     return ['djvudigital'] + cmdflags + [srcdoc, djvu.name] # command passed to subprocess
 
 def c44(srcdoc, cmdflags=[], log=None):
