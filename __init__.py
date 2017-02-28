@@ -38,6 +38,7 @@ if (islinux or isbsd or isosx) and getattr(sys, 'frozen', False):
     #shell messes up escaping of spaced filenames to the script
     # popen = partial(subprocess.Popen, shell=True)
 prints = partial(prints, '{}:'.format(PLUGINNAME)) # for easy printing
+printsd = partial(prints, '{}:'.format('DEBUG')) # for DEBUG msg
 
 # -- Calibre Plugin class --
 class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for gui hooks!
@@ -57,7 +58,6 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         # REGISTERED_BACKENDS = ['pdf2djvu', 'djvudigital']
         # Set default preferences
         DEFAULT_STORE_VALUES = {}
-        DEFAULT_STORE_VALUES['installed'] = []
         for item in self.REGISTERED_BACKENDS:
             DEFAULT_STORE_VALUES[item] = {'flags' : [], 'installed' : False}
         if 'djvudigital' in self.REGISTERED_BACKENDS:
@@ -94,7 +94,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     def cli_main(self, args):
         '''Handles plugin cli interface'''
         args = args[1:] # args[0] = PLUGINNAME
-        prints('cli_main enter: args: ', args) # DEBUG
+        printsd('cli_main enter: args: ', args) # DEBUG
         from calibre_plugins.djvumaker.utils import create_cli_parser
         parser = create_cli_parser(self, PLUGINNAME, PLUGINVER_DOT)
         if len(args) == 0:
@@ -104,7 +104,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         options.func(options)
             
     def cli_backend(self, args):
-        prints('cli_backend enter: plugin_prefs:', self.plugin_prefs)
+        printsd('cli_backend enter: plugin_prefs:', self.plugin_prefs)
         if args.command == 'install':
             self.cli_install_backend(args)
         elif args.command == 'set':
@@ -113,7 +113,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             raise Exception('Command not recognized.')
 
     def cli_install_backend(self, args):
-        prints('cli_install_backend enter: args.backend:', args.backend)
+        printsd('cli_install_backend enter: args.backend:', args.backend)
         if not args.backend:
             installed_backend = [k for k, v in {
                     item : self.plugin_prefs[item]['installed'] for item in self.REGISTERED_BACKENDS
@@ -143,14 +143,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             # TODO: inherit from JSONConfig and make better implementation for defaults
         elif args.backend == 'pdf2djvu':
             # raise NotImplementedError
-            # on python 3.3 exist os.which
-            import urllib
-            import urllib2
-            import urlparse
             from calibre_plugins.djvumaker.utils import install_pdf2djvu
             result = install_pdf2djvu(log=prints)
-
-            # unzip it folder plugins
             # path?
             # TODO: give flag where to installed_backend
             # TODO: ask if add to path?
@@ -173,9 +167,9 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         return None
     
     def cli_convert(self, args):
-        prints(args)
+        printsd(args)
         if args.all:
-            prints('in all')
+            printsd('in all')
             # return NotImplemented
             '`calibre-debug -r djvumaker convert_all`'
             prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
@@ -189,7 +183,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     db.run_plugins_on_postimport(book_id, 'pdf')
                     continue
         elif args.path is not None:
-            prints('path')
+            printsd('path')
             return NotImplemented
             if is_rasterbook(args.path):
                 '`calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)'
@@ -211,7 +205,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     os.system("djvused -e dump '%s'" % djvu)
                     os.system("djvused -v '%s'" % djvu)
         elif args.id is not None:   
-            prints('in id')   
+            printsd('in id')   
             # return NotImplemented    
             '`calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)'
             self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong            
@@ -334,14 +328,14 @@ def is_rasterbook(path):
     Ascertain this by checking whether there are as many image objects in the PDF
     as there are pages +/- 5 (google books and other scanners add pure-text preambles to their pdfs)
     '''
-    prints('enter is_rasterbook: {}'.format(path))
+    printsd('enter is_rasterbook: {}'.format(path))
     podofo = get_podofo()
     pdf = podofo.PDFDoc()
-    prints('opens file')
+    printsd('opens file')
     pdf.open(path)
-    prints('\n starts counting pages')
+    printsd('\n starts counting pages')
     pages = pdf.page_count()
-    prints('\n number of pages: {}'.format(pages))
+    printsd('\n number of pages: {}'.format(pages))
     try:
         # without try statment, a lot of PDFs causes podofo.Error:
         # Error: A NULL handle was passed, but initialized data was expected.
@@ -362,7 +356,7 @@ def is_rasterbook(path):
             # TODO: WARN or ASK user what to do, image count is unknown
             return True
     else:
-        prints("%s: pages(%s) : images(%s) > %s" % (PLUGINNAME, pages, images, path))
+        prints("pages(%s) : images(%s) > %s" % (pages, images, path))
         if pages > 0:
             return abs(pages - images) <= 5
         return False
