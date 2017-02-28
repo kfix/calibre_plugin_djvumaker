@@ -16,7 +16,7 @@ if __name__ == '__main__':
     sys.stdout.write(PLUGINVER_DOT) #Makefile needs this to do releases
     sys.exit()
 
-import errno, os, sys, subprocess, traceback, argparse
+import errno, os, sys, traceback, argparse, subprocess
 from functools import partial, wraps
 
 from calibre import force_unicode, prints
@@ -28,9 +28,11 @@ from calibre.utils.config import JSONConfig
 from calibre.utils.podofo import get_podofo
 from calibre.utils.ipc.simple_worker import fork_job as worker_fork_job, WorkerError
 
-if iswindows and hasattr(sys, 'frozen'):
-    # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
-    subprocess.Popen = partial(subprocess.Popen, creationflags=0x08)
+# if iswindows and hasattr(sys, 'frozen'):
+#     # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
+#     subprocess.Popen = partial(subprocess.Popen, creationflags=0x08)
+    # with this code, subprocess.check_output doesn't returns output
+    # sbp.Popen = partial(sbp.Popen, creationflags=0x08)
 if (islinux or isbsd or isosx) and getattr(sys, 'frozen', False):
     pass
     #shell messes up escaping of spaced filenames to the script
@@ -171,9 +173,74 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             self.plugin_prefs.commit() # always use commit if uses nested dict
             # TODO: inherit from JSONConfig and make better implementation for defaults
         elif args.backend == 'pdf2djvu':
-            raise NotImplementedError
+            # raise NotImplementedError
             # on python 3.3 exist os.which
-            prints('')
+            import urllib
+            import urllib2
+            import urlparse
+
+            try:
+                sbp_out = subprocess.check_output(['pdf2djvu', '--version'],
+                                                  stderr= subprocess.STDOUT)
+                curr_version = sbp_out.splitlines()[0].split()[1]
+                prints('Version {} of pdf2djvu is found locally.'.format(curr_version))
+            except OSError:
+                curr_version = None
+                prints('pdf2djvu is not found locally.')
+
+            def get_url_basename(url):
+                return os.path.basename(urlparse.urlsplit(url).path)
+
+            github_latest_url = r'https://github.com/jwilk/pdf2djvu/releases/latest'
+            github_page = urllib2.urlopen(github_latest_url)
+            new_version = get_url_basename(github_page.geturl())
+            # new_version = '0.9.5'
+            prints('Version {} of pdf2djvu is available on program\'s GitHub page.'.format(new_version))
+
+            def version_str_to_intlist(verstr):
+                return [int(x) for x in verstr.split('.')]
+            new_ver_intlist  = version_str_to_intlist(new_version)
+            curr_ver_intlist = version_str_to_intlist(curr_version)
+            if new_ver_intlist == curr_ver_intlist:                   
+                prints('You have already current version of pdf2djvu.')
+            elif new_ver_intlist > curr_ver_intlist:
+                prints('Do you want to download newer version of pdf2djvu?')
+                if raw_input('y/n') != 'y':
+                    raise Exception('bad input')
+
+                def gen_zip_url(code):
+                    return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-win32-{}.zip'.format(code, code) 
+                def gen_tar_url(code):
+                    return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-{}.tar.xz'.format(code, code)
+                if iswindows:                   
+                    fallback_arch_url = gen_zip_url('0.9.5')
+                    arch_url = gen_zip_url(new_version)
+                else:
+                    fallback_arch_url = gen_tar_url('0.9.5')
+                    arch_url = gen_tar_url(new_version)                
+                
+                fpath, msg = urllib.urlretrieve(arch_url, os.path.join('plugins', 
+                    get_url_basename(arch_url)))
+                if msg['Status'].split()[0] not in ['200', '302']:
+                    fpath, msg_fallback = urllib.urlretrieve(fallback_arch_url, os.path.join('plugins', 
+                    get_url_basename(fallback_arch_url)))
+                    if msg_fallback.split()[0] not in ['200', '302']:
+                        raise Exception('Cannot download pdf2djvu')
+                
+                if iswindows:
+                    from zipfile import ZipFile
+                    with ZipFile(fpath, 'r') as myzip:
+                        myzip.extractall()
+                else:
+                    raise Exception('Python 2.7 Standard Library cannot unpack tar.xz archive, do this manualy')
+
+
+
+
+
+
+            else: #new_ver_intlist < curr_ver_intlist
+                raise Exception("Newer version than current pdf2djvu found.")
             
             
             # check last relase
@@ -181,11 +248,12 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             # unzip it folder plugins
             # path?
 
-            # TODO: check if pdf2djvu already exist on path
             # TODO: give flag where to installed_backend
             # TODO: ask if add to path?
+            # TODO: should use github api v3
             self.plugin_prefs['pdf2djvu']['installed'] = True
             self.plugin_prefs.commit() # always use commit if uses nested dict
+            prints('Installation of pdf2djvu was succesfull or unrequired.')
         else:
             raise Exception('Backend not recognized.')
 
