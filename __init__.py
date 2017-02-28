@@ -95,39 +95,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         '''Handles plugin cli interface'''
         args = args[1:] # args[0] = PLUGINNAME
         prints('cli_main enter: args: ', args) # DEBUG
-        
-        parser = argparse.ArgumentParser(prog="calibre-debug -r {} -- ".format(PLUGINNAME))
-        parser.add_argument('-V', '--version', action='version', version='v{}'.format(PLUGINVER_DOT),
-                            help="show plugin's version number and exit")
-        subparsers = parser.add_subparsers(metavar='command')       
-        
-        parser_backend = subparsers.add_parser('backend', help='Backends handling. See '
-                                               '`{}backend --help`'.format(parser.prog))
-        parser_backend.set_defaults(func=self.cli_backend)
-        parser_backend.add_argument('command', choices=['install', 'set'],
-                                    help='installs or sets backend')
-        parser_backend.add_argument('backend', choices=['djvudigital', 'pdf2djvu'],
-                                         help='choosed backend', nargs="?")
-
-        parser_convert = subparsers.add_parser('convert', help='Convert file to djvu')
-        parser_convert.set_defaults(func=self.cli_convert)
-        group_convert = parser_convert.add_mutually_exclusive_group(required=True)
-        group_convert.add_argument('-p', "--path", 
-                                   help="convert file under PATH to djvu using default settings",
-                                   action="store", type=str)
-        group_convert.add_argument('-i', "--id", 
-                                   help="convert file with ID to djvu using default settings", 
-                                   action="store", type=int)
-        group_convert.add_argument("--all", help="convert all pdf files in calibre's library", 
-                                   action="store_true")
-
-        parser_install_deps = subparsers.add_parser('install_deps', 
-            help='(depreciated) alias for `{}backend install djvudigital`'.format(parser.prog))
-        parser_install_deps.set_defaults(func=self.cli_backend, command='install', backend='djvudigital')
-        parser_convert_all  = subparsers.add_parser('convert_all', 
-            help='(depreciated) alias for `{}convert --all`'.format(parser.prog))
-        parser_convert_all.set_defaults(func=self.cli_convert, all=True)
-
+        from calibre_plugins.djvumaker.utils import create_cli_parser
+        parser = create_cli_parser(self, PLUGINNAME, PLUGINVER_DOT)
         if len(args) == 0:
             parser.print_help()
             return sys.exit()
@@ -178,76 +147,11 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             import urllib
             import urllib2
             import urlparse
+            from calibre_plugins.djvumaker.utils import install_pdf2djvu
+            result = install_pdf2djvu(log=prints)
 
-            try:
-                sbp_out = subprocess.check_output(['pdf2djvu', '--version'],
-                                                  stderr= subprocess.STDOUT)
-                curr_version = sbp_out.splitlines()[0].split()[1]
-                prints('Version {} of pdf2djvu is found locally.'.format(curr_version))
-            except OSError:
-                curr_version = None
-                prints('pdf2djvu is not found locally.')
-
-            def get_url_basename(url):
-                return os.path.basename(urlparse.urlsplit(url).path)
-
-            github_latest_url = r'https://github.com/jwilk/pdf2djvu/releases/latest'
-            github_page = urllib2.urlopen(github_latest_url)
-            new_version = get_url_basename(github_page.geturl())
-            # new_version = '0.9.5'
-            prints('Version {} of pdf2djvu is available on program\'s GitHub page.'.format(new_version))
-
-            def version_str_to_intlist(verstr):
-                return [int(x) for x in verstr.split('.')]
-            new_ver_intlist  = version_str_to_intlist(new_version)
-            curr_ver_intlist = version_str_to_intlist(curr_version)
-            if new_ver_intlist == curr_ver_intlist:                   
-                prints('You have already current version of pdf2djvu.')
-            elif new_ver_intlist > curr_ver_intlist:
-                prints('Do you want to download newer version of pdf2djvu?')
-                if raw_input('y/n') != 'y':
-                    raise Exception('bad input')
-
-                def gen_zip_url(code):
-                    return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-win32-{}.zip'.format(code, code) 
-                def gen_tar_url(code):
-                    return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-{}.tar.xz'.format(code, code)
-                if iswindows:                   
-                    fallback_arch_url = gen_zip_url('0.9.5')
-                    arch_url = gen_zip_url(new_version)
-                else:
-                    fallback_arch_url = gen_tar_url('0.9.5')
-                    arch_url = gen_tar_url(new_version)                
-                
-                fpath, msg = urllib.urlretrieve(arch_url, os.path.join('plugins', 
-                    get_url_basename(arch_url)))
-                if msg['Status'].split()[0] not in ['200', '302']:
-                    fpath, msg_fallback = urllib.urlretrieve(fallback_arch_url, os.path.join('plugins', 
-                    get_url_basename(fallback_arch_url)))
-                    if msg_fallback.split()[0] not in ['200', '302']:
-                        raise Exception('Cannot download pdf2djvu')
-                
-                if iswindows:
-                    from zipfile import ZipFile
-                    with ZipFile(fpath, 'r') as myzip:
-                        myzip.extractall()
-                else:
-                    raise Exception('Python 2.7 Standard Library cannot unpack tar.xz archive, do this manualy')
-
-
-
-
-
-
-            else: #new_ver_intlist < curr_ver_intlist
-                raise Exception("Newer version than current pdf2djvu found.")
-            
-            
-            # check last relase
-            # download last relase
             # unzip it folder plugins
             # path?
-
             # TODO: give flag where to installed_backend
             # TODO: ask if add to path?
             # TODO: should use github api v3
