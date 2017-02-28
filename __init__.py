@@ -35,6 +35,7 @@ if (islinux or isbsd or isosx) and getattr(sys, 'frozen', False):
     pass
     #shell messes up escaping of spaced filenames to the script
     # popen = partial(subprocess.Popen, shell=True)
+prints = partial(prints, '{}:'.format(PLUGINNAME)) # for easy printing
 
 # -- Calibre Plugin class --
 class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for gui hooks!
@@ -47,9 +48,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     on_postimport       = True # Run this plugin after books are addded to the database
     minimum_calibre_version = (2, 22, 0) #needs the new db api w/id() bugfix, and podofo.image_count()
     actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' #InterfaceAction plugin location
-    REGISTERED_BACKENDS = {}
-
-    
+    REGISTERED_BACKENDS = {}    
 
     def __init__(self, *args, **kwargs):
         super(DJVUmaker, self).__init__(*args, **kwargs)
@@ -134,7 +133,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         options.func(options)
             
     def cli_backend(self, args):
-        print('cli_backend enter: plugin_prefs:', self.plugin_prefs)
+        prints('cli_backend enter: plugin_prefs:', self.plugin_prefs)
         if args.command == 'install':
             self.cli_install_backend(args)
         elif args.command == 'set':
@@ -143,12 +142,12 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             raise Exception('Command not recognized.')
 
     def cli_install_backend(self, args):
-        print('cli_install_backend enter: args.backend:', args.backend)
+        prints('cli_install_backend enter: args.backend:', args.backend)
         if not args.backend:
             installed_backend = [k for k, v in {
                     item : self.plugin_prefs[item]['installed'] for item in self.REGISTERED_BACKENDS
                     }.iteritems() if v]
-            print('Currently installed backends: {}'.format( 
+            prints('Currently installed backends: {}'.format( 
                 ', '.join(installed_backend) if installed_backend else 'None'))
             sys.exit()
 
@@ -170,16 +169,29 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             elif isbsd: raise Exception('Only macOS supported')
             self.plugin_prefs['djvudigital']['installed'] = True
             self.plugin_prefs.commit() # always use commit if uses nested dict
+            # TODO: inherit from JSONConfig and make better implementation for defaults
         elif args.backend == 'pdf2djvu':
-            # raise NotImplementedError
+            raise NotImplementedError
+            # on python 3.3 exist os.which
+            prints('')
+            
+            
+            # check last relase
+            # download last relase
+            # unzip it folder plugins
+            # path?
+
+            # TODO: check if pdf2djvu already exist on path
+            # TODO: give flag where to installed_backend
+            # TODO: ask if add to path?
             self.plugin_prefs['pdf2djvu']['installed'] = True
-            self.plugin_prefs.commit()
+            self.plugin_prefs.commit() # always use commit if uses nested dict
         else:
             raise Exception('Backend not recognized.')
 
     def cli_set_backend(self, args):
         if not args.backend:
-            print('Currently set backend: {}'.format(self.plugin_prefs['use_backend']))
+            prints('Currently set backend: {}'.format(self.plugin_prefs['use_backend']))
             sys.exit()
 
         if args.backend in self.REGISTERED_BACKENDS:
@@ -189,9 +201,9 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         return None
     
     def cli_convert(self, args):
-        print(args)
+        prints(args)
         if args.all:
-            print('in all')
+            prints('in all')
             # return NotImplemented
             '`calibre-debug -r djvumaker convert_all`'
             prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
@@ -205,7 +217,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     db.run_plugins_on_postimport(book_id, 'pdf')
                     continue
         elif args.path is not None:
-            print('path')
+            prints('path')
             return NotImplemented
             if is_rasterbook(args.path):
                 '`calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)'
@@ -227,7 +239,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     os.system("djvused -e dump '%s'" % djvu)
                     os.system("djvused -v '%s'" % djvu)
         elif args.id is not None:   
-            print('in id')   
+            prints('in id')   
             # return NotImplemented    
             '`calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)'
             self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong            
@@ -240,7 +252,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         if log: #divert our printing to the caller's logger
             prints = partial(log.prints, 1) #log.print(INFO, yaddayadda)
         else:
-            def prints(p): print(p+'\n')
+            def prints(p): prints(p+'\n')
 
         if sys.__stdin__.isatty():
             fork_job = False #probably being run as `calibredb add`, do all conversions in main loop
@@ -319,7 +331,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     #elif hasattr(self, gui): #if we have the calibre gui running,
     # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
-            print("Starts backend")            
+            prints("Starts backend")            
             djvu = self.run_backend(path_to_ebook, cmdflags, log)
             # if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
             #     djvu = djvudigital(path_to_ebook, cmdflags, log)
@@ -350,14 +362,14 @@ def is_rasterbook(path):
     Ascertain this by checking whether there are as many image objects in the PDF
     as there are pages +/- 5 (google books and other scanners add pure-text preambles to their pdfs)
     '''
-    prints('{}: in is_rasterbook: {}'.format(PLUGINNAME, path))
+    prints('enter is_rasterbook: {}'.format(path))
     podofo = get_podofo()
     pdf = podofo.PDFDoc()
-    prints('{}: opens file'.format(PLUGINNAME))
+    prints('opens file')
     pdf.open(path)
-    prints('\n{}: starts counting pages'.format(PLUGINNAME))
+    prints('\n starts counting pages')
     pages = pdf.page_count()
-    prints('\n{}: number of pages: {}'.format(PLUGINNAME, pages))
+    prints('\n number of pages: {}'.format(pages))
     try:
         # without try statment, a lot of PDFs causes podofo.Error:
         # Error: A NULL handle was passed, but initialized data was expected.
@@ -367,11 +379,11 @@ def is_rasterbook(path):
     except:
         import inspect
         error_info = sys.exc_info()
-        prints("{}: Unexpected error: {}".format(PLUGINNAME, error_info))
-        prints("{}: from module: {}".format(PLUGINNAME, inspect.getmodule(error_info[0])))
+        prints("Unexpected error: {}".format(error_info))
+        prints("from module: {}".format(inspect.getmodule(error_info[0])))
 
         # reraise exception if other exception than podofo.Error
-        # str comparison because of problem with importing cpp Error
+        # str comparison because of problems with importing cpp Error
         if object.__str__(error_info[0]) != "<class 'podofo.Error'>":
             raise
         else:
@@ -396,18 +408,30 @@ def job_handler(fun):
         else:
             cmdbuf = 1 #line-buffered
 
+        # TODO: and what with log in postimport?
+        def merge_prints(*args, **kwargs):
+            if kwargs:
+                raise Exception('Passed **kwargs: {} to prints which uses sys.stdout.write'.format(kwargs))
+            line = ' '.join(('{}: '.format(PLUGINNAME),) + args)
+            return line
+
         if log: #divert our streaming output printing to the caller's logger
-            prints = partial(log.prints, 1) #log.print(INFO, yaddayadda)
+            def prints(*args, **kwargs):                
+                log_prints = partial(log.prints, 1) #log.print(INFO, yaddayadda)
+                return log_prints(merge_prints(*args, **kwargs))
         else:
             #def prints(p): print p
-            prints = sys.stdout.write
+            # prints = sys.stdout.write           
+            def prints(*args, **kwargs):
+                return sys.stdout.write(merge_prints(*args, **kwargs))
+
             #prints = sys.__stdout__.write #unredirectable original fd
             #`pip sarge` makes streaming subprocesses easier than sbp.Popen
 
         bookname = os.path.splitext(os.path.basename(srcdoc))[0]
         with PersistentTemporaryFile(bookname + '.djvu') as djvu: #note, PTF() is from calibre
             try:
-                prints("{}: with PersistentTemporaryFile".format(PLUGINNAME))
+                prints("with PersistentTemporaryFile")
                 env = os.environ
                 cmd = fun(srcdoc, cmdflags, djvu, *args, **kwargs)
                 if isosx:
@@ -429,9 +453,9 @@ def job_handler(fun):
             except OSError as err:
                 if err.errno == errno.ENOENT:
                     prints(
-                        ('{}: $PATH[{}]\n/{} script not available to perform conversion:'
-                            '{} must be installed').format(PLUGINNAME, os.environ['PATH'],
-                                                        cmd[0], fun.__name__))
+                        ('$PATH[{}]\n/{} script not available to perform conversion:'
+                         '{} must be installed').format(os.environ['PATH'], cmd[0], 
+                                                           fun.__name__))
                 return False
             if proc.returncode != 0:
                 return False #10 djvudigital shell/usage error
