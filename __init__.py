@@ -44,7 +44,7 @@ DEBUG = True # set True for debugging
 def empty_function(*args, **kwargs):
     pass
 if DEBUG:
-    printsd = partial(prints, '{}:'.format('DEBUG')) # for DEBUG msg
+    printsd = partial(prints, '{}:'.format('DEBUG')) # for DEBUG msgs
 else:
     printsd = empty_function
 
@@ -60,10 +60,14 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     minimum_calibre_version = (2, 22, 0) #needs the new db api w/id() bugfix, and podofo.image_count()
     actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' #InterfaceAction plugin location
     REGISTERED_BACKENDS = collections.OrderedDict()
+    
+    @classmethod
+    def register_backend(cls, fun):
+        cls.REGISTERED_BACKENDS[fun.__name__] = fun
+        return fun
 
     def __init__(self, *args, **kwargs):
         super(DJVUmaker, self).__init__(*args, **kwargs)
-        # REGISTERED_BACKENDS = ['pdf2djvu', 'djvudigital']
         # Set default preferences
         DEFAULT_STORE_VALUES = {}
         DEFAULT_STORE_VALUES['plugin_version'] = PLUGINVER
@@ -89,18 +93,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 
     def run_backend(self, *args, **kwargs):
         use_backend = self.plugin_prefs['use_backend']
-
-        # DEBUG DEL
-        use_backend = 'pdf2djvu'
-        prints(subprocess.check_output(['pwd']))
         kwargs['preferences'] = self.plugin_prefs
-
         return self.REGISTERED_BACKENDS[use_backend](*args, **kwargs)
-
-    @classmethod
-    def register_backend(cls, fun):
-        cls.REGISTERED_BACKENDS[fun.__name__] = fun
-        return fun
 
     def customization_help(self, gui=False):
         return 'Enter additional `djvudigital --help` command-flags here:'
@@ -113,7 +107,6 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         '''Handles plugin cli interface'''
         args = args[1:] # args[0] = PLUGINNAME
         printsd('cli_main enter: args: ', args) # DEBUG
-        # from calibre_plugins.djvumaker.utils import create_cli_parser
         parser = create_cli_parser(self, PLUGINNAME, PLUGINVER_DOT,
             self.REGISTERED_BACKENDS.keys())
         if len(args) == 0:
@@ -165,8 +158,6 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             self.plugin_prefs.commit() # always use commit if uses nested dict
             # TODO: inherit from JSONConfig and make better implementation for defaults
         elif args.backend == 'pdf2djvu':
-            # raise NotImplementedError
-            # from calibre_plugins.djvumaker.utils import install_pdf2djvu
             success, version = install_pdf2djvu(PLUGINNAME, self.plugin_prefs, log=prints)
             # path?
             # TODO: give flag where to installed_backend
@@ -197,9 +188,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     def cli_convert(self, args):
         printsd(args)
         if args.all:
-            printsd('in all')
-            # return NotImplemented
-            '`calibre-debug -r djvumaker convert_all`'
+            printsd('in cli convert_all')
+            # `calibre-debug -r djvumaker convert_all`
             prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
             raw_input('')
             from calibre.library import db
@@ -214,7 +204,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             printsd('path')
             return NotImplemented
             if is_rasterbook(args.path):
-                '`calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)'
+                # `calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)
                 djvu = self.run_backend(args.path)
                 
                 if djvu:
@@ -228,9 +218,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     os.system("djvused -e dump '%s'" % djvu)
                     os.system("djvused -v '%s'" % djvu)
         elif args.id is not None:   
-            printsd('in id')   
-            # return NotImplemented    
-            '`calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)'
+            printsd('in convert by id')
+            # `calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)
             self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong            
 
     # -- calibre filetype plugin mandatory methods --
@@ -470,11 +459,11 @@ def raise_if_not_supported(srcdoc, supported_extensions):
 def pdf2djvu(srcdoc, cmdflags, djvu, preferences):
     '''pdf2djvu backend shell command generation'''
     raise_if_not_supported(srcdoc, ['pdf'])
-    pdf2djvu_path, _, __, ___ = discover_backend('pdf2djvu', preferences, PLUGINNAME)
-    prints(pdf2djvu_path)
+    pdf2djvu_path, _, _, _ = discover_backend('pdf2djvu', preferences, PLUGINNAME)
+    if pdf2djvu_path is None:
+        raise OSError('pdf2djvu not found')
     # command passed to subprocess
     return [pdf2djvu_path, '-o', djvu.name, srcdoc]
-    # return [create_backend_link('pdf2djvu', backend_version), '-o', djvu.name, srcdoc]
 
 @DJVUmaker.register_backend
 @job_handler

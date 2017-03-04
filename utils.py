@@ -59,6 +59,7 @@ def version_intlist_to_str(verintlist):
     return '.'.join(map(str,verintlist))
 
 def version_from_output(output):
+    '''Extracts version number from typical pdf2djvu --version output.'''
     return output.splitlines()[0].split()[1]
 def check_version_executable(executable_path):
     return version_from_output(subprocess.check_output([executable_path, '--version'], 
@@ -130,8 +131,8 @@ def create_backend_link(backend_name, version):
     return os.path.join(os.path.join('djvumaker', '{}-{}'.format(backend_name, version), backend_name))
 
 # DEBUG TODO:
-class Installer_pdf2djvu(object):    
-    pass
+# class Installer_pdf2djvu(Installer):    
+#     pass
 
 def install_pdf2djvu(PLUGINNAME, preferences, log=print):    
     backend_path, saved_version, installed_version, path_version = discover_backend('pdf2djvu',
@@ -230,18 +231,14 @@ def download_pdf2djvu(web_version, log):
     def gen_tar_url(code):
         return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-{}.tar.xz'.format(code, code)
 
+    # TODO: what with fallback!?! new argument
     fallback_version = '0.9.5'
     if iswindows:                   
         fallback_arch_url = gen_zip_url(fallback_version)
         arch_url = gen_zip_url(web_version)
     else:
         fallback_arch_url = gen_tar_url(fallback_version)
-        arch_url = gen_tar_url(web_version)                
-    
-    # DEBUG DEL
-    # arch_url = 'http://pkowalczyk.pl/almost-empty.zip'
-    # arch_url = 'http://pkowalczyk.pl/almost-empty.tar.xz'
-    
+        arch_url = gen_tar_url(web_version)    
 
     def download_progress_bar(i, chunk, full):
         ''''args: a count of blocks transferred so far, 
@@ -264,7 +261,7 @@ def download_pdf2djvu(web_version, log):
         os.mkdir('djvumaker')
     fpath, msg = urllib.urlretrieve(arch_url, os.path.join('.', 'djvumaker', get_url_basename(arch_url)),
                                     download_progress_bar)
-    print()
+    # print() # should progess bar function handle this TODO:
     if not check_msg(fpath, msg):
         log('Cannot download current version {} from GitHub.'.format(web_version))
         if web_version != fallback_version:
@@ -272,7 +269,7 @@ def download_pdf2djvu(web_version, log):
             fpath, msg_fallback = urllib.urlretrieve(fallback_arch_url, os.path.join('.','djvumaker', 
                                                      get_url_basename(fallback_arch_url)), 
                                                      download_progress_bar)
-            print()
+            # print() # should progess bar function handle this TODO:
             if not check_msg(fpath, msg_fallback):
                 raise Exception('Cannot download pdf2djvu.')
     else:
@@ -288,8 +285,9 @@ def unpack_zip_or_tar(PLUGINNAME, fpath, log):
         with ZipFile(fpath, 'r') as myzip:
             myzip.extractall(os.path.dirname(fpath))
     else:
+        # Python 2.7 Standard Library cannot unpack tar.xz archive, do this manually or through shell
+        # it can not work on macOS
         subprocess.call(['tar', 'xf', fpath, '-C', os.path.dirname(fpath)])
-        # raise Exception('Python 2.7 Standard Library cannot unpack tar.xz archive, do this manually')
     log('Extracted downloaded archive')
     os.remove(fpath)
     log('Removed downloaded archive')
@@ -313,10 +311,11 @@ def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, l
     bar = fill * filledLength + '-' * (length - filledLength)
     prints('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end = '\r')
     # Print New Line on Complete
-    if iteration == total:
+    if iteration >= total:
         prints()
 
 def ask_yesno_input(question, prints=print):
+    '''Ask user for yes/no input. Loops if other answer.'''
     while True:
         prints(question + ' (y/n)')
         user_input = raw_input().lower()
