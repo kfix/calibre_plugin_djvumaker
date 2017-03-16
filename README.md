@@ -17,13 +17,13 @@ Installation
 ---
 1. Right click the preferences button in calibre, select get new plugins, scroll down the list and choose the DjVuMaker plugin to install
    * Or clone this repo and install from source
-      ```bash
-      git clone https://github.com/kfix/calibre_plugin_djvumaker
-      cd calibre_plugin_djvumaker
-      calibre-customize -b ./
-      ```
-2. [Required] Build the conversion programs (**fixme: works only on macOS**, check next section for solution)
-```calibre-debug -R djvumaker -- backend install djvudigital```
+   ```bash
+   git clone https://github.com/kfix/calibre_plugin_djvumaker
+   cd calibre_plugin_djvumaker
+   calibre-customize -b ./
+   ```
+2. [Required] Build the conversion programs (**fixme: works only on macOS**, check next section for solution)\
+    ```calibre-debug -R djvumaker -- backend install djvudigital```
 3. (Re)start Calibre and start converting your PDF books!  
 
 4. [Optional] go to Preferences -> Interface::Toolbars so you can place the DJVU menu where you see fit.
@@ -33,10 +33,10 @@ Installation of secondary backend
 For all having troubles with building GsDjvu there is possibility to install secondary backend - [pdf2djvu](http://jwilk.net/software/pdf2djvu).
 The "pdf2djvu" is a pdf to djvu converter developed by Jakub Wilk ([GitHub](https://github.com/jwilk/pdf2djvu)).
 Although slower than djvudigital it's installation is much simplier. There is also a posibility to install it through *this* plugin:
-  ```bash
-  calibre-debug -R djvumaker -- backend install pdf2djvu #(should work for any OS)
-  calibre-debug -R djvumaker -- backend set pdf2djvu
-  ```
+```bash
+calibre-debug -R djvumaker -- backend install pdf2djvu #(should work for any OS)
+calibre-debug -R djvumaker -- backend set pdf2djvu
+```
 
 Also you can just add pdf2djvu to your path and:
 ```calibre-debug -R djvumaker -- backend set pdf2djvu```
@@ -53,8 +53,8 @@ Therefore both packages must be built by the user in a complicated procedure, wh
 Q: Why not write a "standard" Conversion Plugin for DjVU?
 ---
 Calibre's conversion API currently supports two pipelines:  
-1) markup-based ebooks (book.xfmt > book.OEB > book.yfmt): useless for working on image-based scans.  
-2) comic books (*.cbz): unusably slow for library books due to its over-reliance on Python for its transform pipeline.  
+1. markup-based ebooks (book.xfmt > book.OEB > book.yfmt): useless for working on image-based scans.  
+2. comic books (*.cbz): unusably slow for library books due to its over-reliance on Python for its transform pipeline.  
 
 Only ghostscript+gsdjvu delivers usable conversion times for large scanned books.  
 Patching Calibre's conversion API to add a 3rd pipeline to support them would be far more involved than this sub-500-line plugin (excluding these explanations :-).  

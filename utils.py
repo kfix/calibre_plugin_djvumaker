@@ -288,6 +288,8 @@ def unpack_zip_or_tar(PLUGINNAME, fpath, log):
         # Python 2.7 Standard Library cannot unpack tar.xz archive, do this manually or through shell
         # it can not work on macOS
         subprocess.call(['tar', 'xf', fpath, '-C', os.path.dirname(fpath)])
+        # DEBUG TODO: you have to make it still...
+        # deosn't work for linux or mac then
     log('Extracted downloaded archive')
     os.remove(fpath)
     log('Removed downloaded archive')

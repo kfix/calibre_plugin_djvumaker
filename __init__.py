@@ -52,6 +52,7 @@ else:
 class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for gui hooks!
     name                = PLUGINNAME # Name of the plugin
     description         = 'Convert raster-based document files (Postscript, PDF) to DJVU with GUI button and on-import'
+    # TODO: ON IMPORT?!?!
     supported_platforms = ['linux', 'osx', 'windows'] # Platforms this plugin will run on
     author              = 'Joey Korkames' # The author of this plugin
     version             = PLUGINVER   # The version number of this plugin
@@ -60,7 +61,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     minimum_calibre_version = (2, 22, 0) #needs the new db api w/id() bugfix, and podofo.image_count()
     actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' #InterfaceAction plugin location
     REGISTERED_BACKENDS = collections.OrderedDict()
-    
+
     @classmethod
     def register_backend(cls, fun):
         cls.REGISTERED_BACKENDS[fun.__name__] = fun
@@ -78,7 +79,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             DEFAULT_STORE_VALUES['use_backend'] = 'djvudigital'
         else:
             raise Exception('No djvudigital backend.')
-        
+
         # JSONConfig is a dict-like object,
         # if coresponding .json file has not a specific key, it's got from .defaults
         self.plugin_prefs = JSONConfig(os.path.join('plugins', PLUGINNAME))
@@ -96,8 +97,20 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         kwargs['preferences'] = self.plugin_prefs
         return self.REGISTERED_BACKENDS[use_backend](*args, **kwargs)
 
-    def customization_help(self, gui=False):
-        return 'Enter additional `djvudigital --help` command-flags here:'
+    def customization_help(self, gui=True):
+        # method required by calibre
+        # TODO: add info about current JSON settings
+        current_backend = self.plugin_prefs['use_backend']
+        flags = ''.join(self.plugin_prefs[current_backend]['flags'])
+        command = current_backend + flags
+        help_command = 'calibre-debug -r djvumaker -- --help'
+        info = ('<p>You can enter overwritting command and flags to create djvu files.<br>'
+                'Currently set command is: {}<br><br>'
+                'You can read more about plugin customization running "{}" from command line.</p>').format(command, help_command) # TODO: tab
+        return info
+
+        # return 'Enter additional `djvudigital --help` command-flags here:'
+
         # os.system('MANPAGER=cat djvudigital --help')
         #TODO: make custom config widget so we can have attrs for each of the wrappers:
         # djvudigital minidjvu, c44, etc.
@@ -114,8 +127,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             return sys.exit()
         options = parser.parse_args(args)
         options.func(options)
-            
-    def cli_test(self, args):        
+
+    def cli_test(self, args):
         prints(subprocess.check_output(['pwd']))
 
     def cli_backend(self, args):
@@ -133,7 +146,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             installed_backend = [k for k, v in {
                     item : self.plugin_prefs[item]['installed'] for item in self.REGISTERED_BACKENDS
                     }.iteritems() if v]
-            prints('Currently installed backends: {}'.format( 
+            prints('Currently installed backends: {}'.format(
                 ', '.join(installed_backend) if installed_backend else 'None'))
             sys.exit()
 
@@ -184,7 +197,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         else:
             raise Exception('Backend not recognized.')
         return None
-    
+
     def cli_convert(self, args):
         printsd(args)
         if args.all:
@@ -206,7 +219,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             if is_rasterbook(args.path):
                 # `calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)
                 djvu = self.run_backend(args.path)
-                
+
                 if djvu:
                     prints(("\n\nopening djvused in subshell, press Ctrl+D to exit and"
                            "delete '%s'\n\n") % djvu)
@@ -217,10 +230,10 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                     os.system("stat '%s'" % djvu)
                     os.system("djvused -e dump '%s'" % djvu)
                     os.system("djvused -v '%s'" % djvu)
-        elif args.id is not None:   
+        elif args.id is not None:
             printsd('in convert by id')
             # `calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)
-            self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong            
+            self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong
 
     # -- calibre filetype plugin mandatory methods --
     def run(self, path_to_ebook):
@@ -309,7 +322,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
     #elif hasattr(self, gui): #if we have the calibre gui running,
     # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
-            prints("Starts backend")            
+            prints("Starts backend")
             djvu = self.run_backend(path_to_ebook, cmdflags, log)
             # if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
             #     djvu = djvudigital(path_to_ebook, cmdflags, log)
@@ -390,16 +403,23 @@ def job_handler(fun):
         def merge_prints(*args, **kwargs):
             if kwargs:
                 raise Exception('Passed **kwargs: {} to prints which uses sys.stdout.write'.format(kwargs))
-            line = ' '.join(('{}: '.format(PLUGINNAME),) + args)
+
+            # log('starting logging')
+            # log(str(args))
+            # log('end logging')
+            # log('stdout encoding: ' + sys.stdout.encoding)
+
+            args = map(force_unicode, args)
+            line = ' '.join(['{}: '.format(PLUGINNAME)] + args)
             return line
 
         if log: #divert our streaming output printing to the caller's logger
-            def prints(*args, **kwargs):                
+            def prints(*args, **kwargs):
                 log_prints = partial(log.prints, 1) #log.print(INFO, yaddayadda)
                 return log_prints(merge_prints(*args, **kwargs))
         else:
             #def prints(p): print p
-            # prints = sys.stdout.write           
+            # prints = sys.stdout.write
             def prints(*args, **kwargs):
                 return sys.stdout.write(merge_prints(*args, **kwargs))
 
@@ -418,6 +438,7 @@ def job_handler(fun):
 
                 proc = subprocess.Popen(cmd, env=env, bufsize=cmdbuf, stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
+                # TODO: aborting doesn't work
                 #stderr:csepdjvu, stdout: ghostscript & djvudigital
                 if cmdbuf > 0: #stream the output
                     while proc.poll() is None:
@@ -432,7 +453,7 @@ def job_handler(fun):
                 if err.errno == errno.ENOENT:
                     prints(
                         ('$PATH[{}]\n/{} script not available to perform conversion:'
-                         '{} must be installed').format(os.environ['PATH'], cmd[0], 
+                         '{} must be installed').format(os.environ['PATH'], cmd[0],
                                                            fun.__name__))
                 return False
             if proc.returncode != 0:
@@ -468,7 +489,7 @@ def pdf2djvu(srcdoc, cmdflags, djvu, preferences):
 @DJVUmaker.register_backend
 @job_handler
 def djvudigital(srcdoc, cmdflags, djvu, preferences):
-    '''djvudigital backend shell command generation'''    
+    '''djvudigital backend shell command generation'''
     raise_if_not_supported(srcdoc, ['pdf', 'ps'])
     return ['djvudigital'] + cmdflags + [srcdoc, djvu.name] # command passed to subprocess
 
