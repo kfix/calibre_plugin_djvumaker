@@ -240,13 +240,13 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
     def run(self, path_to_ebook):
         return path_to_ebook # noop
 
-    def postimport(self, book_id, book_format, db=None, log=None, fork_job=True):
+    def postimport(self, book_id, book_format, db=None, log=None, fork_job=True, abort=None,
+                   notifications=None):
         if log: # divert our printing to the caller's logger
-            # prints = partial(log.prints, 1) # log.print(INFO, yaddayadda)
-            # prints = partial(log.prints, log.INFO)
             prints = log # Log object has __call__ dunder method with INFO level
         else:
-            def prints(p): prints(p+'\n')
+            def prints(p):
+                prints(p+'\n')
 
         if sys.__stdin__.isatty():
             fork_job = False # probably being run as `calibredb add`, do all conversions in main loop
@@ -328,7 +328,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
             prints("Starts backend")
-            djvu = self.run_backend(path_to_ebook, cmdflags, log)
+            djvu = self.run_backend(path_to_ebook, cmdflags, log, abort, notifications)
             # if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
             #     djvu = djvudigital(path_to_ebook, cmdflags, log)
             # elif self.plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
@@ -394,7 +394,7 @@ def is_rasterbook(path):
 
 def job_handler(fun):
     @wraps(fun)
-    def wrapper(srcdoc, cmdflags=None, log=None, *args, **kwargs):
+    def wrapper(srcdoc, cmdflags=None, log=None, abort=None, notifications=None, *args, **kwargs):
         '''Wraps around every backend.'''
         if cmdflags is None:
             cmdflags = []
@@ -443,11 +443,12 @@ def job_handler(fun):
 
                 proc = subprocess.Popen(cmd, env=env, bufsize=cmdbuf, stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
-                # TODO: aborting doesn't work
                 # stderr:csepdjvu, stdout: ghostscript & djvudigital
                 if cmdbuf > 0: #stream the output
                     while proc.poll() is None:
                         prints(proc.stdout.readline())
+                        if abort is not None and abort.is_set():
+                            proc.kill()
                     # remainder of post-polled buffer
                     for line in proc.stdout.read().split('\n'):
                         prints(line)

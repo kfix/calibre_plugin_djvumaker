@@ -91,7 +91,8 @@ class ConvertToDJVUAction(InterfaceAction):
         # abort -> object with .is_set() bool method
         # notifications -> Queue, .put(frac, msg)
         if book_id:
-            find_plugin('djvumaker').postimport(book_id, ftype, db, log, fork_job=False)
+            find_plugin('djvumaker').postimport(book_id, ftype, db, log, fork_job=False, abort=abort,
+                                                notifications=notifications)
         elif fpath:
             # TODO: unknow keywords?
             # raise NotImplementedError
