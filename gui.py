@@ -8,22 +8,22 @@ from cStringIO import StringIO
 from calibre.utils.logging import ERROR, WARN, DEBUG, INFO
 
 from calibre.gui2.actions import InterfaceAction
-#http://manual.calibre-ebook.com/_modules/calibre/gui2/actions.html
+# http://manual.calibre-ebook.com/_modules/calibre/gui2/actions.html
 
 from calibre.customize.ui import run_plugins_on_postimport, find_plugin
 from calibre.gui2.threaded_jobs import ThreadedJob
 
-#http://manual.calibre-ebook.com/creating_plugins.html#ui-py
+# http://manual.calibre-ebook.com/creating_plugins.html#ui-py
 class ConvertToDJVUAction(InterfaceAction):
     name = 'Convert to DJVU'
 
     action_spec = (_('Convert to DJVU'), 'mimetypes/djvu.png',
                    _('engage the djvumaker plugin on this book'), None)
-    #  (label, icon_path, tooltip, keyboard shortcut)
+    # (label, icon_path, tooltip, keyboard shortcut)
 
     action_type = 'global'
 
-    #don't auto-add the button to any menus' top-level
+    # don't auto-add the button to any menus' top-level
     dont_add_to = frozenset(['toolbar', 'toolbar-device', 'context-menu', 'context-menu-device',
                              'toolbar-child', 'menubar', 'menubar-device',
                              'context-menu-cover-browser'])
@@ -31,11 +31,11 @@ class ConvertToDJVUAction(InterfaceAction):
     def genesis(self):
         self.qaction.triggered.connect(self.convert_book)
 
-    #def gui_layout_complete(self):
+    # def gui_layout_complete(self):
     def initialization_complete(self):
-    # append my top-level DJVU action to the built-in conversion menus
-    # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/actions/convert.py
-    # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/__init__.py#L26
+        # append my top-level DJVU action to the built-in conversion menus
+        # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/actions/convert.py
+        # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/__init__.py#L26
         cb = self.gui.iactions['Convert Books']
         cm = partial(cb.create_menu_action, cb.qaction.menu())
         cm('convert-djvu-cvtm', _('Convert to DJVU'), icon=self.qaction.icon(),
@@ -70,10 +70,10 @@ class ConvertToDJVUAction(InterfaceAction):
                                       args=(db, book_id, None, 'pdf'), #by book_id!
                                       kwargs={},
                                       callback=self._tjob_refresh_books)
-                   #there is an assumed log=GUILog() ! src/calibre/utils/logging.py
+                    # there is an assumed log=GUILog() ! src/calibre/utils/logging.py
                     self.gui.job_manager.run_threaded_job(job)
-                    #too bad console utils and filetype plugins can't start a jobmanager..fork_job is a wretch
-        else: #!gui_library
+                    # too bad console utils and filetype plugins can't start a jobmanager..fork_job is a wretch
+        else: # !gui_library
         # looking at a device's flash contents or some other non-library store,
         # filepaths here are not to be tracked in the db
             fpaths = self.gui.current_view().model().paths(rows)
@@ -86,14 +86,20 @@ class ConvertToDJVUAction(InterfaceAction):
                 self.gui.job_manager.run_threaded_job(job)
 
     def _tjob_djvu_convert(self, db, book_id, fpath, ftype, abort, log, notifications):
+        # TODO: pass abort and notification to postimport
+        # https://github.com/kovidgoyal/calibre/blob/e333001d31dc49102fe5178bd2a8af4f06962fac/src/calibre/gui2/threaded_jobs.py#L40
+        # abort -> object with .is_set() bool method
+        # notifications -> Queue, .put(frac, msg)
         if book_id:
             find_plugin('djvumaker').postimport(book_id, ftype, db, log, fork_job=False)
         elif fpath:
+            # TODO: unknow keywords?
+            # raise NotImplementedError
             find_plugin('djvumaker').djvudigital(path, flags, None)
 
     def _tjob_refresh_books(self, job):
         book_id = job.args[1]
-        #self.gui.iactions['Edit Metadata'].refresh_gui([book_id], covers_changed=False)
+        # self.gui.iactions['Edit Metadata'].refresh_gui([book_id], covers_changed=False)
         self.gui.library_view.model().refresh_ids([book_id])
         self.gui.library_view.model().current_changed(self.gui.library_view.currentIndex(),
                                                       self.gui.library_view.currentIndex())

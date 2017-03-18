@@ -23,7 +23,7 @@ from calibre import force_unicode, prints
 from calibre.ebooks import ConversionError
 from calibre.ptempfile import PersistentTemporaryFile
 from calibre.customize import FileTypePlugin, InterfaceActionBase
-from calibre.constants import (isosx, iswindows, islinux, isbsd)
+from calibre.constants import isosx, iswindows, islinux, isbsd, DEBUG
 from calibre.utils.config import JSONConfig
 from calibre.utils.podofo import get_podofo
 from calibre.utils.ipc.simple_worker import fork_job as worker_fork_job, WorkerError
@@ -33,14 +33,13 @@ from calibre_plugins.djvumaker.utils import create_backend_link, create_cli_pars
 #     # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
 #     subprocess.Popen = partial(subprocess.Popen, creationflags=0x08)
     # with this code, subprocess.check_output doesn't returns output
-    # sbp.Popen = partial(sbp.Popen, creationflags=0x08)
+
 if (islinux or isbsd or isosx) and getattr(sys, 'frozen', False):
     pass
-    #shell messes up escaping of spaced filenames to the script
+    # shell messes up escaping of spaced filenames to the script
     # popen = partial(subprocess.Popen, shell=True)
 prints = partial(prints, '{}:'.format(PLUGINNAME)) # for easy printing
 
-DEBUG = True # set True for debugging
 def empty_function(*args, **kwargs):
     pass
 if DEBUG:
@@ -49,17 +48,19 @@ else:
     printsd = empty_function
 
 # -- Calibre Plugin class --
-class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for gui hooks!
+class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for gui hooks!
     name                = PLUGINNAME # Name of the plugin
-    description         = 'Convert raster-based document files (Postscript, PDF) to DJVU with GUI button and on-import'
-    # TODO: ON IMPORT?!?!
+    description         = ('Convert raster-based document files (Postscript, PDF) to DJVU with GUI'
+                          ' button and on-import')
+    # TODO: ON IMPORT? doesn'work
     supported_platforms = ['linux', 'osx', 'windows'] # Platforms this plugin will run on
     author              = 'Joey Korkames' # The author of this plugin
     version             = PLUGINVER   # The version number of this plugin
-    file_types          = set(['pdf','ps', 'eps']) # The file types that this plugin will be automatically applied to
+    # The file types that this plugin will be automatically applied to
+    file_types          = set(['pdf','ps', 'eps'])
     on_postimport       = True # Run this plugin after books are addded to the database
-    minimum_calibre_version = (2, 22, 0) #needs the new db api w/id() bugfix, and podofo.image_count()
-    actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' #InterfaceAction plugin location
+    minimum_calibre_version = (2, 22, 0) # needs the new db api w/id() bugfix, and podofo.image_count()
+    actual_plugin = 'calibre_plugins.djvumaker.gui:ConvertToDJVUAction' # InterfaceAction plugin location
     REGISTERED_BACKENDS = collections.OrderedDict()
 
     @classmethod
@@ -112,9 +113,9 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         # return 'Enter additional `djvudigital --help` command-flags here:'
 
         # os.system('MANPAGER=cat djvudigital --help')
-        #TODO: make custom config widget so we can have attrs for each of the wrappers:
+        # TODO: make custom config widget so we can have attrs for each of the wrappers:
         # djvudigital minidjvu, c44, etc.
-        #TODO: `man2html djvumaker` and gui=True for comprehensive help?
+        # TODO: `man2html djvumaker` and gui=True for comprehensive help?
 
     def cli_main(self, args):
         '''Handles plugin cli interface'''
@@ -162,8 +163,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                               " brew cask install djview")
                 else:
                     sys.exit()
-            #need a cask for the caminova finder/safari plugin too
-            #todo: make more install scripts
+            # need a cask for the caminova finder/safari plugin too
+            # TODO: make more install scripts
             elif islinux: raise Exception('Only macOS supported')
             elif iswindows: raise Exception('Only macOS supported')
             elif isbsd: raise Exception('Only macOS supported')
@@ -223,7 +224,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                 if djvu:
                     prints(("\n\nopening djvused in subshell, press Ctrl+D to exit and"
                            "delete '%s'\n\n") % djvu)
-                    #de-munge the tty
+                    # de-munge the tty
                     sys.stdin = sys.__stdin__
                     sys.stdout = sys.__stdout__
                     sys.stderr = sys.__stderr__
@@ -237,17 +238,19 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
 
     # -- calibre filetype plugin mandatory methods --
     def run(self, path_to_ebook):
-        return path_to_ebook #noop
+        return path_to_ebook # noop
 
     def postimport(self, book_id, book_format, db=None, log=None, fork_job=True):
-        if log: #divert our printing to the caller's logger
-            prints = partial(log.prints, 1) #log.print(INFO, yaddayadda)
+        if log: # divert our printing to the caller's logger
+            # prints = partial(log.prints, 1) # log.print(INFO, yaddayadda)
+            # prints = partial(log.prints, log.INFO)
+            prints = log # Log object has __call__ dunder method with INFO level
         else:
             def prints(p): prints(p+'\n')
 
         if sys.__stdin__.isatty():
-            fork_job = False #probably being run as `calibredb add`, do all conversions in main loop
-            rpc_refresh = True #use the calibre RPC to signal a GUI refresh
+            fork_job = False # probably being run as `calibredb add`, do all conversions in main loop
+            rpc_refresh = True # use the calibre RPC to signal a GUI refresh
 
         if db is None:
             from calibre.library import db
@@ -256,19 +259,19 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
         if db.has_format(book_id, 'DJVU', index_is_id=True):
             prints("{}: already have 'DJVU' format document for book ID #{}".format(PLUGINNAME,
                                                                                     book_id))
-            return None #don't auto convert, we already have a DJVU for this document
+            return None # don't auto convert, we already have a DJVU for this document
 
         path_to_ebook = db.format_abspath(book_id, book_format, index_is_id=True)
         if book_format == 'pdf':
             if is_rasterbook(path_to_ebook):
-                pass #should add a 'scanned' or 'djvumaker' tag
+                pass # should add a 'scanned' or 'djvumaker' tag
             else:
-            #this is a marked-up/vector-based pdf,
+            # this is a marked-up/vector-based pdf,
             # no advantages to having another copy in DJVU format
                 prints(("{}: {} document from book ID #{} determined to be a markup-based ebook,"
                         " not converting to DJVU").format(self.name, book_format, book_id))
                 return None #no-error in job panel
-            #TODO: test the DPI to determine if a document is from a broad-sheeted book.
+            # TODO: test the DPI to determine if a document is from a broad-sheeted book.
             # if so, queue up k2pdfopt to try and chunk the content appropriately to letter size
 
             prints(("{}: scheduling new {} document from book ID #{} for post-import DJVU"
@@ -285,21 +288,23 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
             #useful for not blocking calibre GUI when large PDFs
             # are dropped into the automatic-import-folder
             try:
-            #https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/ipc/simple_worker.py #dispatch API for Worker()
-            #src/calibre/utils/ipc/launch.py #Worker() uses sbp.Popen to
+            #https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/ipc/simple_worker.py
+            # dispatch API for Worker()
+            # src/calibre/utils/ipc/launch.py
+            # Worker() uses sbp.Popen to
             # run a second Python to a logfile
             # note that Calibre bungs the python loader to check the plugin directory when
             # modules with calibre_plugin. prefixed are passed
-            #https://github.com/kovidgoyal/calibre/blob/master/src/calibre/customize/zipplugin.py#L192
+            # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/customize/zipplugin.py#L192
                 func_name = self.plugin_prefs['Options']['use_backend']
                 jobret = worker_fork_job('calibre_plugins.%s' % self.name, func_name,
-                                  args=[path_to_ebook, cmdflags, log],
-                                  kwargs={},
-                                  env={'PATH': os.environ['PATH'] + ':/usr/local/bin'},
-                                  #djvu and poppler-utils on osx
-                                  timeout=600)
-                                  #todo: determine a resonable timeout= based on filesize or
-                                  # make a heartbeat= check
+                            args=[path_to_ebook, cmdflags, log],
+                            kwargs={},
+                            env={'PATH': os.environ['PATH'] + ':/usr/local/bin'},
+                            #djvu and poppler-utils on osx
+                            timeout=600)
+                            # TODO: determine a resonable timeout= based on filesize or
+                            # make a heartbeat= check
 
             except WorkerError as e:
                 prints('{}: djvudigital background conversion failed: \n{}'.format(
@@ -319,8 +324,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): #multiple inheritance for 
                 djvu = jobret['result']
             else:
                 WorkerError("djvu conversion error: %s" % jobret['result'])
-    #elif hasattr(self, gui): #if we have the calibre gui running,
-    # we can give it a threadedjob and not use fork_job
+        #elif hasattr(self, gui): #if we have the calibre gui running,
+        # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
             prints("Starts backend")
             djvu = self.run_backend(path_to_ebook, cmdflags, log)
@@ -375,6 +380,7 @@ def is_rasterbook(path):
 
         # reraise exception if other exception than podofo.Error
         # str comparison because of problems with importing cpp Error
+        # TODO: error type in except statment
         if object.__str__(error_info[0]) != "<class 'podofo.Error'>":
             raise
         else:
@@ -413,42 +419,41 @@ def job_handler(fun):
             line = ' '.join(['{}: '.format(PLUGINNAME)] + args)
             return line
 
-        if log: #divert our streaming output printing to the caller's logger
+        if log: # divert our streaming output printing to the caller's logger
             def prints(*args, **kwargs):
-                log_prints = partial(log.prints, 1) #log.print(INFO, yaddayadda)
-                return log_prints(merge_prints(*args, **kwargs))
+                return log(merge_prints(*args, **kwargs))
         else:
-            #def prints(p): print p
+            # def prints(p): print p
             # prints = sys.stdout.write
             def prints(*args, **kwargs):
                 return sys.stdout.write(merge_prints(*args, **kwargs))
 
-            #prints = sys.__stdout__.write #unredirectable original fd
-            #`pip sarge` makes streaming subprocesses easier than sbp.Popen
+            # prints = sys.__stdout__.write #unredirectable original fd
+            # `pip sarge` makes streaming subprocesses easier than sbp.Popen
 
         bookname = os.path.splitext(os.path.basename(srcdoc))[0]
-        with PersistentTemporaryFile(bookname + '.djvu') as djvu: #note, PTF() is from calibre
+        with PersistentTemporaryFile(bookname + '.djvu') as djvu: # note, PTF() is from calibre
             try:
                 prints("with PersistentTemporaryFile")
                 env = os.environ
                 cmd = fun(srcdoc, cmdflags, djvu, *args, **kwargs)
                 if isosx:
                     env['PATH'] = "/usr/local/bin:" + env['PATH'] # Homebrew
-                prints('%s: subprocess: %s' % (PLUGINNAME, cmd))
+                prints('subprocess: {}'.format(cmd))
 
                 proc = subprocess.Popen(cmd, env=env, bufsize=cmdbuf, stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
                 # TODO: aborting doesn't work
-                #stderr:csepdjvu, stdout: ghostscript & djvudigital
+                # stderr:csepdjvu, stdout: ghostscript & djvudigital
                 if cmdbuf > 0: #stream the output
                     while proc.poll() is None:
                         prints(proc.stdout.readline())
-                    #remainder of post-polled buffer
+                    # remainder of post-polled buffer
                     for line in proc.stdout.read().split('\n'):
                         prints(line)
                 else:
                     proc.communicate()
-                prints('%s: subprocess returned %s' % (PLUGINNAME, proc.returncode))
+                prints('subprocess returned {}'.format(proc.returncode))
             except OSError as err:
                 if err.errno == errno.ENOENT:
                     prints(
@@ -457,7 +462,7 @@ def job_handler(fun):
                                                            fun.__name__))
                 return False
             if proc.returncode != 0:
-                return False #10 djvudigital shell/usage error
+                return False # 10 djvudigital shell/usage error
             return djvu.name
     return wrapper
 
@@ -484,7 +489,10 @@ def pdf2djvu(srcdoc, cmdflags, djvu, preferences):
     if pdf2djvu_path is None:
         raise OSError('pdf2djvu not found')
     # command passed to subprocess
+    # DEBUG DEL:
+    # return [pdf2djvu_path, '-v', '-o', djvu.name, srcdoc] # verbose
     return [pdf2djvu_path, '-o', djvu.name, srcdoc]
+    # TODO: weird output, with a lot of newlines on the end
 
 @DJVUmaker.register_backend
 @job_handler
@@ -494,16 +502,16 @@ def djvudigital(srcdoc, cmdflags, djvu, preferences):
     return ['djvudigital'] + cmdflags + [srcdoc, djvu.name] # command passed to subprocess
 
 def c44(srcdoc, cmdflags=[], log=None):
-    #part of djvulibre, converts jpegs to djvu
+    # part of djvulibre, converts jpegs to djvu
     #  then combine with djvm -c book.djvu pageN.djvu pageN+1.djvu ..
-    #files end up being huge
+    # files end up being huge
     raise NotImplementedError
 
 def cjb2(srcdoc, cmdflags=[], log=None):
-    #part of djvulibre, converts tiff to djvu
+    # part of djvulibre, converts tiff to djvu
     #  need to bitone/greyscale the tiff beforehand
     #    gs -sDEVICE=pdfwrite -sColorConversionStrategy=Gray -dProcessColorModel=DeviceGray -dOverrideICC -f input.pdf -o output.pdf
-    #osx has Quartz and a little cocoa app can break down a pdf into tiffs:
+    # osx has Quartz and a little cocoa app can break down a pdf into tiffs:
     #  http://lists.apple.com/archives/cocoa-dev/2002/Jun/msg00729.html
     #  http://scraplab.net/print-production-with-quartz-and-cocoa/
     #  then combine with djvm -c book.djvu pageN.djvu pageN+1.djvu ..
