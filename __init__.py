@@ -188,6 +188,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             raise Exception('Backend not recognized.')
 
     def cli_set_backend(self, args):
+        # TODO: add site_customization handling here and delete from other places
         if not args.backend:
             prints('Currently set backend: {}'.format(self.plugin_prefs['use_backend']))
             sys.exit()
@@ -249,7 +250,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                 prints(p+'\n')
 
         if sys.__stdin__.isatty():
-            fork_job = False # probably being run as `calibredb add`, do all conversions in main loop
+            # probably being run as `calibredb add`, do all conversions in main loop
+            fork_job = False
             rpc_refresh = True # use the calibre RPC to signal a GUI refresh
 
         if db is None:
@@ -264,7 +266,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         path_to_ebook = db.format_abspath(book_id, book_format, index_is_id=True)
         if book_format == 'pdf':
             if is_rasterbook(path_to_ebook):
-                pass # should add a 'scanned' or 'djvumaker' tag
+                pass # TODO: should add a 'scanned' or 'djvumaker' tag
             else:
             # this is a marked-up/vector-based pdf,
             # no advantages to having another copy in DJVU format
@@ -329,10 +331,6 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         else: #!fork_job & !gui
             prints("Starts backend")
             djvu = self.run_backend(path_to_ebook, cmdflags, log, abort, notifications)
-            # if self.plugin_prefs['Options']['use_backend'] == 'djvudigital':
-            #     djvu = djvudigital(path_to_ebook, cmdflags, log)
-            # elif self.plugin_prefs['Options']['use_backend'] == 'pdf2djvu':
-            #     djvu = pdf2djvu(path_to_ebook, cmdflags, log)
 
         if djvu:
             db.new_api.add_format(book_id, 'DJVU', djvu, run_hooks=True)
@@ -349,7 +347,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                     t.conn.close()
                     prints("%s: signalled Calibre GUI refresh" % PLUGINNAME)
         else:
-            raise Exception('ConversionError 3, djvu: {}'.format(djvu))
+            raise Exception('ConversionError, djvu: {}'.format(djvu))
 
 def is_rasterbook(path):
     '''
@@ -407,24 +405,18 @@ def job_handler(fun):
 
         # TODO: and what with log in postimport?
         def merge_prints(*args, **kwargs):
+            '''Joins args to one string and prepands it with PLUGINNAME.
+             Reason: sys.stdout.write accepts only one argument.'''
             if kwargs:
                 raise Exception('Passed **kwargs: {} to prints which uses sys.stdout.write'.format(kwargs))
-
-            # log('starting logging')
-            # log(str(args))
-            # log('end logging')
-            # log('stdout encoding: ' + sys.stdout.encoding)
-
-            args = map(force_unicode, args)
-            line = ' '.join(['{}: '.format(PLUGINNAME)] + args)
+            args = map(lambda x: force_unicode(str(x)), args)
+            line = ' '.join(['{}:'.format(PLUGINNAME)] + args)
             return line
 
         if log: # divert our streaming output printing to the caller's logger
             def prints(*args, **kwargs):
                 return log(merge_prints(*args, **kwargs))
         else:
-            # def prints(p): print p
-            # prints = sys.stdout.write
             def prints(*args, **kwargs):
                 return sys.stdout.write(merge_prints(*args, **kwargs))
 
@@ -446,10 +438,13 @@ def job_handler(fun):
                 # stderr:csepdjvu, stdout: ghostscript & djvudigital
                 if cmdbuf > 0: #stream the output
                     while proc.poll() is None:
-                        prints(proc.stdout.readline())
+                        # TODO: piping print through backend util method, to add custom output handling + notifications about job progress
+                        readout = proc.stdout.readline()
+                        if readout.strip() != '':
+                            prints(readout)
                         if abort is not None and abort.is_set():
                             proc.kill()
-                    # remainder of post-polled buffer
+
                     for line in proc.stdout.read().split('\n'):
                         prints(line)
                 else:
@@ -494,6 +489,7 @@ def pdf2djvu(srcdoc, cmdflags, djvu, preferences):
     # return [pdf2djvu_path, '-v', '-o', djvu.name, srcdoc] # verbose
     return [pdf2djvu_path, '-o', djvu.name, srcdoc]
     # TODO: weird output, with a lot of newlines on the end
+
 
 @DJVUmaker.register_backend
 @job_handler
