@@ -16,7 +16,7 @@ if __name__ == '__main__':
     sys.stdout.write(PLUGINVER_DOT) #Makefile needs this to do releases
     sys.exit()
 
-import errno, os, sys, traceback, argparse, subprocess, collections
+import errno, os, sys, shutil, traceback, argparse, subprocess, collections
 from functools import partial, wraps
 
 from calibre import force_unicode, prints
@@ -42,6 +42,10 @@ prints = partial(prints, '{}:'.format(PLUGINNAME)) # for easy printing
 
 def empty_function(*args, **kwargs):
     pass
+
+# DEBIG COMMENT
+# DEBUG = False
+
 if DEBUG:
     printsd = partial(prints, '{}:'.format('DEBUG')) # for DEBUG msgs
 else:
@@ -70,6 +74,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
 
     def __init__(self, *args, **kwargs):
         super(DJVUmaker, self).__init__(*args, **kwargs)
+        self.prints = prints
         # Set default preferences
         DEFAULT_STORE_VALUES = {}
         DEFAULT_STORE_VALUES['plugin_version'] = PLUGINVER
@@ -99,23 +104,26 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         return self.REGISTERED_BACKENDS[use_backend](*args, **kwargs)
 
     def customization_help(self, gui=True):
-        # method required by calibre
+        '''Method required by calibre. Shows user info in "Customize plugin" menu.'''
         # TODO: add info about current JSON settings
+        # TODO: proper english
         current_backend = self.plugin_prefs['use_backend']
         flags = ''.join(self.plugin_prefs[current_backend]['flags'])
         command = current_backend + flags
         help_command = 'calibre-debug -r djvumaker -- --help'
         info = ('<p>You can enter overwritting command and flags to create djvu files.<br>'
-                'Currently set command is: {}<br><br>'
-                'You can read more about plugin customization running "{}" from command line.</p>').format(command, help_command) # TODO: tab
+                'Currently set command is: <b>{}</b><br><br>'
+                'You can read more about plugin customization running "{}" from command line.</p>').format(command, help_command)
         return info
 
         # return 'Enter additional `djvudigital --help` command-flags here:'
 
         # os.system('MANPAGER=cat djvudigital --help')
         # TODO: make custom config widget so we can have attrs for each of the wrappers:
-        # djvudigital minidjvu, c44, etc.
+        #       djvudigital minidjvu, c44, etc.
         # TODO: `man2html djvumaker` and gui=True for comprehensive help?
+        # TODO: add information if curently is overriend by customization help
+
 
     def cli_main(self, args):
         '''Handles plugin cli interface'''
@@ -203,24 +211,31 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
     def cli_convert(self, args):
         printsd(args)
         if args.all:
+            # `calibre-debug -r djvumaker -- convert --all`
             printsd('in cli convert_all')
-            # `calibre-debug -r djvumaker convert_all`
+            # TODO: make work `djvumaker -- convert --all`
+            raise NotImplementedError
+
+            # TODO: Use humaninput from utils.py
             prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
             raw_input('')
             from calibre.library import db
+            from calibre.customize.ui import run_plugins_on_postimport
             db = db() # initialize calibre library database
             for book_id in list(db.all_ids()):
                 if db.has_format(book_id, 'DJVU', index_is_id=True):
                     continue
+                # TODO: shouldn't work with this code, db has not atributte run_plugins_on_postimport
+                #       https://github.com/kovidgoyal/calibre/blob/master/src/calibre/customize/ui.py
                 if db.has_format(book_id, 'PDF', index_is_id=True):
                     db.run_plugins_on_postimport(book_id, 'pdf')
                     continue
         elif args.path is not None:
             printsd('path')
-            return NotImplemented
+            # raise NotImplementedError
             if is_rasterbook(args.path):
-                # `calibre-debug -r djvumaker test.pdf` -> tempfile(test.djvu)
-                djvu = self.run_backend(args.path)
+                # `calibre-debug -r djvumaker -- convert -p test.pdf` -> tempfile(test.djvu)
+                djvu = self.run_backend(args.path, log=prints)
 
                 if djvu:
                     prints(("\n\nopening djvused in subshell, press Ctrl+D to exit and"
@@ -230,54 +245,72 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                     sys.stdout = sys.__stdout__
                     sys.stderr = sys.__stderr__
                     os.system("stat '%s'" % djvu)
+                    # TODO: doesn't work on Windows
                     os.system("djvused -e dump '%s'" % djvu)
                     os.system("djvused -v '%s'" % djvu)
+                    input_filename, _ = os.path.splitext(args.path)
+                    shutil.copy2(djvu, input_filename + '.djvu')
+                    if not isosx:
+                        prints("Ready DJVU outputed to: {}.".format(input_filename + '.djvu'))
         elif args.id is not None:
+            # `calibre-debug -r djvumaker -- convert -i 123 #id(123).pdf` -> tempfile(id(123).djvu)
             printsd('in convert by id')
-            # `calibre-debug -r djvumaker 123 #id(123).pdf` -> tempfile(id(123).djvu)
-            self.postimport(args.id, 'pdf') # bookid and book_format, can go really wrong
+            self.postimport(args.id)
 
     # -- calibre filetype plugin mandatory methods --
     def run(self, path_to_ebook):
         return path_to_ebook # noop
 
-    def postimport(self, book_id, book_format, db=None, log=None, fork_job=True, abort=None,
+    def postimport(self, book_id, book_format=None, db=None, log=None, fork_job=True, abort=None,
                    notifications=None):
         if log: # divert our printing to the caller's logger
             prints = log # Log object has __call__ dunder method with INFO level
+            prints = partial(prints, '{}:'.format(PLUGINNAME))
         else:
-            def prints(p):
-                prints(p+'\n')
+            log = self.prints.func
+        try:
+            prints
+        except NameError:
+            prints = self.prints
 
         if sys.__stdin__.isatty():
-            # probably being run as `calibredb add`, do all conversions in main loop
+            # if run by cli, i.e.:
+            #    calibredb add
+            #    calibredebug -r djvumaker -- convert -i #id
+            # runs also for right click if in debug
             fork_job = False
             rpc_refresh = True # use the calibre RPC to signal a GUI refresh
 
         if db is None:
-            from calibre.library import db
+            from calibre.library import db # TODO: probably legacy db import, change for new_api
             db = db() # initialize calibre library database
 
+        if book_format == None:
+            if not db.has_format(book_id, 'PDF', index_is_id=True):
+                raise Exception('Book with id #{} has not a PDF format.'.format(book_id))
+            else:
+                book_format='pdf'
+
         if db.has_format(book_id, 'DJVU', index_is_id=True):
-            prints("{}: already have 'DJVU' format document for book ID #{}".format(PLUGINNAME,
-                                                                                    book_id))
+            prints("already have 'DJVU' format document for book ID #{}".format(book_id))
             return None # don't auto convert, we already have a DJVU for this document
 
         path_to_ebook = db.format_abspath(book_id, book_format, index_is_id=True)
         if book_format == 'pdf':
-            if is_rasterbook(path_to_ebook):
+            is_rasterbook_val, pages, images = is_rasterbook(path_to_ebook, basic_return=False)
+            if is_rasterbook_val:
                 pass # TODO: should add a 'scanned' or 'djvumaker' tag
             else:
             # this is a marked-up/vector-based pdf,
             # no advantages to having another copy in DJVU format
-                prints(("{}: {} document from book ID #{} determined to be a markup-based ebook,"
-                        " not converting to DJVU").format(self.name, book_format, book_id))
+                prints(("{} document from book ID #{} determined to be a markup-based ebook,"
+                        " not converting to DJVU").format(book_format, book_id))
                 return None #no-error in job panel
             # TODO: test the DPI to determine if a document is from a broad-sheeted book.
-            # if so, queue up k2pdfopt to try and chunk the content appropriately to letter size
+            #       if so, queue up k2pdfopt to try and chunk the content appropriately to letter size
 
-            prints(("{}: scheduling new {} document from book ID #{} for post-import DJVU"
-                    " conversion: {}").format(self.name, book_format, book_id, path_to_ebook))
+            prints(("scheduling new {} document from book ID #{} for post-import DJVU"
+                    " conversion: {}").format(book_format, book_id, path_to_ebook))
 
             cmdflags = []
             if self.site_customization is not None: cmdflags.extend(self.site_customization.split())
@@ -290,7 +323,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             #useful for not blocking calibre GUI when large PDFs
             # are dropped into the automatic-import-folder
             try:
-            #https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/ipc/simple_worker.py
+            # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/ipc/simple_worker.py
             # dispatch API for Worker()
             # src/calibre/utils/ipc/launch.py
             # Worker() uses sbp.Popen to
@@ -303,20 +336,19 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                             args=[path_to_ebook, cmdflags, log],
                             kwargs={},
                             env={'PATH': os.environ['PATH'] + ':/usr/local/bin'},
-                            #djvu and poppler-utils on osx
+                            # djvu and poppler-utils on osx
                             timeout=600)
                             # TODO: determine a resonable timeout= based on filesize or
                             # make a heartbeat= check
 
             except WorkerError as e:
-                prints('{}: djvudigital background conversion failed: \n{}'.format(
-                    self.name, force_unicode(e.orig_tb)))
-                raise #ConversionError
+                prints('djvudigital background conversion failed: \n{}'.format(force_unicode(e.orig_tb)))
+                raise # ConversionError
             except:
                 prints(traceback.format_exc())
                 raise
 
-        #dump djvudigital output logged in file by the Worker to
+        # dump djvudigital output logged in file by the Worker to
         # calibre proc's (gui or console) log/stdout
             with open(jobret['stdout_stderr'], 'rb') as f:
                 raw = f.read().strip()
@@ -326,36 +358,50 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                 djvu = jobret['result']
             else:
                 WorkerError("djvu conversion error: %s" % jobret['result'])
-        #elif hasattr(self, gui): #if we have the calibre gui running,
+        # elif hasattr(self, gui): #if we have the calibre gui running,
         # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
             prints("Starts backend")
-            djvu = self.run_backend(path_to_ebook, cmdflags, log, abort, notifications)
+            djvu = self.run_backend(path_to_ebook, cmdflags, log, abort, notifications, pages,
+                                    images)
 
         if djvu:
             db.new_api.add_format(book_id, 'DJVU', djvu, run_hooks=True)
-            prints("%s: added new 'DJVU' document to book ID #%s" % (PLUGINNAME, book_id))
+            prints("added new 'DJVU' document to book ID #{}".format(book_id))
             if sys.__stdin__.isatty():
-            #update calibre gui Out-Of-Band. Like if we were run as a command-line scripted import
-            #this resets current gui views/selections, no cleaner way to do it :-(
+            # update calibre gui Out-Of-Band. Like if we were run as a command-line scripted import
+            # this resets current gui views/selections, no cleaner way to do it :-(
                 from calibre.utils.ipc import RC
                 t = RC(print_error=False)
                 t.start()
                 t.join(3)
-                if t.done: #GUI is running
+                if t.done: # GUI is running
                     t.conn.send('refreshdb:')
                     t.conn.close()
-                    prints("%s: signalled Calibre GUI refresh" % PLUGINNAME)
+                    prints("signalled Calibre GUI refresh")
         else:
             raise Exception('ConversionError, djvu: {}'.format(djvu))
 
-def is_rasterbook(path):
+def is_rasterbook(path, basic_return=True):
     '''
     Identify whether this is a raster doc (ie. a scan) or a digitally authored text+graphic doc.
     Skip conversion if source doc is not mostly raster-image based.
     Ascertain this by checking whether there are as many image objects in the PDF
     as there are pages +/- 5 (google books and other scanners add pure-text preambles to their pdfs)
+
+    If basic_return is True:
+        returns:
+            aforementioned bool value
+    otherwise:
+        returns:
+            aforementioned bool value, number of pages, number of images
     '''
+    def fun_basic_return(result, pages, images):
+        if basic_return:
+            return result
+        else:
+            return result, pages, images
+
     printsd('enter is_rasterbook: {}'.format(path))
     podofo = get_podofo()
     pdf = podofo.PDFDoc()
@@ -383,33 +429,49 @@ def is_rasterbook(path):
             raise
         else:
             # TODO: WARN or ASK user what to do, image count is unknown
-            return True
+            return fun_basic_return(True, pages, None)
     else:
         prints("pages(%s) : images(%s) > %s" % (pages, images, path))
         if pages > 0:
-            return abs(pages - images) <= 5
-        return False
+            return fun_basic_return(abs(pages - images) <= 5, pages, images)
+        return fun_basic_return(False, pages, images)
 
 def job_handler(fun):
     @wraps(fun)
-    def wrapper(srcdoc, cmdflags=None, log=None, abort=None, notifications=None, *args, **kwargs):
+    def wrapper(srcdoc, cmdflags=None, log=None, abort=None, notifications=None, pages=None,
+                images=None, *args, **kwargs):
         '''Wraps around every backend.'''
+        # TODO: better notifications
+        if notifications is None:
+            class EmptyClass():
+                pass
+            notifications = EmptyClass()
+            notifications.put = lambda x : None
+        pages = 1 if pages is None else pages
+        images = 1 if images is None else images
+        notifications.put((1/(pages+3),'Launching backend...'))
+
         if cmdflags is None:
             cmdflags = []
 
         if 'CALIBRE_WORKER' in os.environ:
-            #running as a fork_job, all process output piped to logfile, so don't buffer
+            # running as a fork_job, all process output piped to logfile, so don't buffer
             cmdbuf = 0
         else:
-            cmdbuf = 1 #line-buffered
+            cmdbuf = 1 # line-buffered
 
         # TODO: and what with log in postimport?
         def merge_prints(*args, **kwargs):
             '''Joins args to one string and prepands it with PLUGINNAME.
-             Reason: sys.stdout.write accepts only one argument.'''
+            Reason: sys.stdout.write accepts only one argument.'''
+            if 'force_unicode' not in kwargs or kwargs['force_unicode']:
+                args = map(lambda x: force_unicode(str(x)), args)
+            else:
+                args = map(lambda x: str(x), args)
+            kwargs.pop('force_unicode', None)
             if kwargs:
                 raise Exception('Passed **kwargs: {} to prints which uses sys.stdout.write'.format(kwargs))
-            args = map(lambda x: force_unicode(str(x)), args)
+
             line = ' '.join(['{}:'.format(PLUGINNAME)] + args)
             return line
 
@@ -426,7 +488,6 @@ def job_handler(fun):
         bookname = os.path.splitext(os.path.basename(srcdoc))[0]
         with PersistentTemporaryFile(bookname + '.djvu') as djvu: # note, PTF() is from calibre
             try:
-                prints("with PersistentTemporaryFile")
                 env = os.environ
                 cmd = fun(srcdoc, cmdflags, djvu, *args, **kwargs)
                 if isosx:
@@ -435,13 +496,20 @@ def job_handler(fun):
 
                 proc = subprocess.Popen(cmd, env=env, bufsize=cmdbuf, stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
-                # stderr:csepdjvu, stdout: ghostscript & djvudigital
+                # stderr: csepdjvu, stdout: ghostscript & djvudigital
                 if cmdbuf > 0: #stream the output
                     while proc.poll() is None:
                         # TODO: piping print through backend util method, to add custom output handling + notifications about job progress
                         readout = proc.stdout.readline()
-                        if readout.strip() != '':
-                            prints(readout)
+                        if force_unicode(readout).strip() != '':
+                            # TODO: better custom pringing
+                            if hasattr(fun, 'printing'): # DEBUG DEL
+                                readout, progress, msg = fun.printing(readout, pages, images)
+                                if progress is not None:
+                                    notifications.put((progress, msg))
+                                prints(readout, force_unicode=False)
+                            else:
+                                prints(readout)
                         if abort is not None and abort.is_set():
                             proc.kill()
 
@@ -449,13 +517,15 @@ def job_handler(fun):
                         prints(line)
                 else:
                     proc.communicate()
+                # TODO: better notifications
+                notifications.put(((pages+2)/(pages+3), 'Cleaning...'))
                 prints('subprocess returned {}'.format(proc.returncode))
             except OSError as err:
                 if err.errno == errno.ENOENT:
                     prints(
                         ('$PATH[{}]\n/{} script not available to perform conversion:'
                          '{} must be installed').format(os.environ['PATH'], cmd[0],
-                                                           fun.__name__))
+                                                        fun.__name__))
                 return False
             if proc.returncode != 0:
                 return False # 10 djvudigital shell/usage error
@@ -476,20 +546,36 @@ def raise_if_not_supported(srcdoc, supported_extensions):
         raise NotSupportedFiletype('This backend supports only {} files, but get {}.'.format(
             ', '.join(['.' + item for item in supported_extensions]), '.'+file_ext))
 
+# DEBUG DEL
+def pdf2djvu_custom_printing(readout, pages, images):
+    readout = force_unicode(readout)
+    readout = 'pdf2djvu: ' + readout.strip()
+    splitted = readout.split('#')
+    if len(splitted) == 3:
+        page = int(splitted[2])
+        # TODO: better notifications
+        return readout, (page+1)/(pages+3), 'Converting....'
+    return readout, None, None
+
+# DEBUG DEL
+def add_method_dec(method, method_name):
+    def inner(fun):
+        setattr(fun, method_name, method)
+        return fun
+    return inner
+
 @DJVUmaker.register_backend
 @job_handler
+@add_method_dec(pdf2djvu_custom_printing, 'printing') # DEBUG DEL
 def pdf2djvu(srcdoc, cmdflags, djvu, preferences):
     '''pdf2djvu backend shell command generation'''
     raise_if_not_supported(srcdoc, ['pdf'])
     pdf2djvu_path, _, _, _ = discover_backend('pdf2djvu', preferences, PLUGINNAME)
     if pdf2djvu_path is None:
         raise OSError('pdf2djvu not found')
-    # command passed to subprocess
     # DEBUG DEL:
     # return [pdf2djvu_path, '-v', '-o', djvu.name, srcdoc] # verbose
     return [pdf2djvu_path, '-o', djvu.name, srcdoc]
-    # TODO: weird output, with a lot of newlines on the end
-
 
 @DJVUmaker.register_backend
 @job_handler

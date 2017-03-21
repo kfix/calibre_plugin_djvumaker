@@ -86,17 +86,13 @@ class ConvertToDJVUAction(InterfaceAction):
                 self.gui.job_manager.run_threaded_job(job)
 
     def _tjob_djvu_convert(self, db, book_id, fpath, ftype, abort, log, notifications):
-        # TODO: pass abort and notification to postimport
-        # https://github.com/kovidgoyal/calibre/blob/e333001d31dc49102fe5178bd2a8af4f06962fac/src/calibre/gui2/threaded_jobs.py#L40
-        # abort -> object with .is_set() bool method
-        # notifications -> Queue, .put(frac, msg)
         if book_id:
             find_plugin('djvumaker').postimport(book_id, ftype, db, log, fork_job=False,
                                                 abort=abort, notifications=notifications)
         elif fpath:
             # TODO: unknow keywords?
-            # raise NotImplementedError
-            find_plugin('djvumaker').djvudigital(path, flags, None)
+            raise NotImplementedError
+            # find_plugin('djvumaker').djvudigital(path, flags, None)
 
     def _tjob_refresh_books(self, job):
         book_id = job.args[1]
