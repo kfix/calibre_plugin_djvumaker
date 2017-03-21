@@ -27,7 +27,7 @@ from calibre.constants import isosx, iswindows, islinux, isbsd, DEBUG
 from calibre.utils.config import JSONConfig
 from calibre.utils.podofo import get_podofo
 from calibre.utils.ipc.simple_worker import fork_job as worker_fork_job, WorkerError
-from calibre_plugins.djvumaker.utils import create_backend_link, create_cli_parser, install_pdf2djvu, discover_backend
+from calibre_plugins.djvumaker.utils import create_backend_link, create_cli_parser, install_pdf2djvu, discover_backend, ask_yesno_input
 
 # if iswindows and hasattr(sys, 'frozen'):
 #     # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
@@ -50,6 +50,10 @@ if DEBUG:
     printsd = partial(prints, '{}:'.format('DEBUG')) # for DEBUG msgs
 else:
     printsd = empty_function
+
+# LEFT TODO: 1. postimport if file dropped to library or through calibredb add
+# LEFT TODO: 2. postimport if convert all
+# LEFT TODO: 3. testing and documentation
 
 # -- Calibre Plugin class --
 class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for gui hooks!
@@ -214,11 +218,12 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             # `calibre-debug -r djvumaker -- convert --all`
             printsd('in cli convert_all')
             # TODO: make work `djvumaker -- convert --all`
-            raise NotImplementedError
+            raise NotImplementedError('Convert all is not implemented.')
 
-            # TODO: Use humaninput from utils.py
-            prints("Press Enter to copy-convert all PDFs to DJVU, or CTRL+C to abort...")
-            raw_input('')
+            user_input = ask_yesno_input('Do you wany to copy-convert all PDFs to DJVU?')
+            if not user_input:
+                return None
+
             from calibre.library import db
             from calibre.customize.ui import run_plugins_on_postimport
             db = db() # initialize calibre library database
@@ -231,27 +236,27 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                     db.run_plugins_on_postimport(book_id, 'pdf')
                     continue
         elif args.path is not None:
-            printsd('path')
-            # raise NotImplementedError
+            # `calibre-debug -r djvumaker -- convert -p test.pdf` -> tempfile(test.djvu)
+            printsd('in path')
             if is_rasterbook(args.path):
-                # `calibre-debug -r djvumaker -- convert -p test.pdf` -> tempfile(test.djvu)
-                djvu = self.run_backend(args.path, log=prints)
-
+                djvu = self.run_backend(args.path, log=self.prints.func)
                 if djvu:
-                    prints(("\n\nopening djvused in subshell, press Ctrl+D to exit and"
-                           "delete '%s'\n\n") % djvu)
+                    input_filename, _ = os.path.splitext(args.path)
+                    shutil.copy2(djvu, input_filename + '.djvu')
+                    prints("Finished DJVU outputed to: {}.".format(input_filename + '.djvu'))
+
+                    user_input = ask_yesno_input('Do you want to open djvused in subshell? (may not work on not macOS)')
+                    if not user_input:
+                        return None
                     # de-munge the tty
                     sys.stdin = sys.__stdin__
                     sys.stdout = sys.__stdout__
                     sys.stderr = sys.__stderr__
                     os.system("stat '%s'" % djvu)
-                    # TODO: doesn't work on Windows
+                    # TODO: doesn't work on Windows, why is it here?
                     os.system("djvused -e dump '%s'" % djvu)
                     os.system("djvused -v '%s'" % djvu)
-                    input_filename, _ = os.path.splitext(args.path)
-                    shutil.copy2(djvu, input_filename + '.djvu')
-                    if not isosx:
-                        prints("Ready DJVU outputed to: {}.".format(input_filename + '.djvu'))
+
         elif args.id is not None:
             # `calibre-debug -r djvumaker -- convert -i 123 #id(123).pdf` -> tempfile(id(123).djvu)
             printsd('in convert by id')

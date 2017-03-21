@@ -322,8 +322,8 @@ def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, l
 def ask_yesno_input(question, prints=print):
     '''Ask user for yes/no input. Loops if other answer.'''
     while True:
-        prints(question + ' (y/n)')
-        user_input = raw_input().lower()
+        prints('\n\t'+ question + ' (y/n)\n')
+        user_input = raw_input().strip().lower()
         if user_input == 'y':
             return True
         elif user_input == 'n':
