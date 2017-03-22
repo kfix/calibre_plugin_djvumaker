@@ -41,7 +41,18 @@ def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACK
     group_convert.add_argument('-i', "--id",
                                 help="convert file with ID to djvu using default settings",
                                 action="store", type=int)
-    group_convert.add_argument("--all", help="convert all pdf files in calibre's library",
+    group_convert.add_argument("--all", help="convert all pdf files in calibre's library, you have to turn on postimport conversion first (`calibre-debug -r djvumaker -- postimport -y`)",
+                                action="store_true")
+
+    parser_postimport = subparsers.add_parser('postimport', help='change postimport settings')
+    parser_postimport.set_defaults(func=self_DJVUmaker.cli_set_postimport)
+    group_postimport = parser_postimport.add_mutually_exclusive_group(required=False)
+    group_postimport.add_argument('-y', "--yes",
+                                help=("sets plugin to convert PDF files after import"
+                                      " (do not work for pdf2djvu)"),
+                                action="store_true")
+    group_postimport.add_argument('-n', "--no",
+                                help="sets plugin to do not convert PDF files after import (default)",
                                 action="store_true")
 
     parser_install_deps = subparsers.add_parser('install_deps',

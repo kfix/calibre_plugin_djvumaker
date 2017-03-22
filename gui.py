@@ -87,7 +87,7 @@ class ConvertToDJVUAction(InterfaceAction):
 
     def _tjob_djvu_convert(self, db, book_id, fpath, ftype, abort, log, notifications):
         if book_id:
-            find_plugin('djvumaker').postimport(book_id, ftype, db, log, fork_job=False,
+            find_plugin('djvumaker')._postimport(book_id, ftype, db, log, fork_job=False,
                                                 abort=abort, notifications=notifications)
         elif fpath:
             # TODO: proper english

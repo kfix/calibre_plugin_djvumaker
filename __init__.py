@@ -1,7 +1,60 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import (unicode_literals, division, absolute_import,
-                        print_function)
+"""djvumaker Calibre plugin - easy method to convert PDF documents to DJVU
+
+Plugin uses other tools (further called backends) to make user-friendly conversion
+of PDF documents (like scanned books) to lightweight DJVU format inside Calibre (e-book manager).
+Plugin makes easy to install and use two backends - djvudigital (for macOS) and pdf2djvu (for Windows).
+
+Usage:
+(after installation of plugin and dowloading a suitable backend - look at CLI)
+* right click on PDF file inside calibre, conversion occures after clicking
+    on `Convert to DJVU` in `Convert books` submenu
+* (after turning on automatic postimport conversion - look at CLI) just add pdf file to Calibre library, conversion should automaticly start
+* through CLI, with commends `calibre-debug -r djvumaker -- convert [-p PATH, -i ID, --all]`
+
+CLI:
+usage: calibre-debug -r djvumaker --  [-h] [-V] command ...
+positional arguments:
+  command
+    backend       Backends handling.
+      {install,set}           installs or sets backend
+      {pdf2djvu,djvudigital}  choosed backend
+
+    convert       Convert file to djvu.
+      -p PATH, --path PATH  convert file under PATH to djvu using default settings
+      -i ID, --id ID        convert file with ID to djvu using default settings
+      --all                 convert all pdf files in calibre's library, you have to turn on postimport
+                                conversion first, works for every backend
+
+    postimport    Change postimport settings
+      -y, --yes     sets plugin to convert PDF files after import (do not work for pdf2djvu)
+      -n, --no      sets plugin to do not convert PDF files after import (default)
+
+    install_deps  (depreciated) alias for `calibre-debug -r djvumaker -- backend install djvudigital`
+    convert_all   (depreciated) alias for `calibre-debug -r djvumaker -- convert --all`
+
+optional arguments:
+  -h, --help     show help message and exit
+  -V, --version  show plugin's version number and exit
+
+Features:
+* downloading and installation two backend:
+    * djvudigital (for macOS - through brew)
+    * pdf2djvu (for Windows - through automated download from author's github)
+* discover method - you can just add your existing tool to you PATH env
+* easy-to-use right click menu item for conversion of single or many PDF documents
+* postimport file conversion (curently works only for djvudigital backend)
+* notification about current conversion progress for (curently works only for pdf2djvu backend)
+* CLI support for setting changes, installations of backends and manual conversion of files
+
+Technical details:
+
+History of development:
+
+Main TODOs:
+"""
+from __future__ import unicode_literals, division, absolute_import, print_function
 
 __license__ = 'GPL 3'
 __copyright__ = '2015, Joey Korkames <http://github.com/kfix>'
@@ -27,7 +80,8 @@ from calibre.constants import isosx, iswindows, islinux, isbsd, DEBUG
 from calibre.utils.config import JSONConfig
 from calibre.utils.podofo import get_podofo
 from calibre.utils.ipc.simple_worker import fork_job as worker_fork_job, WorkerError
-from calibre_plugins.djvumaker.utils import create_backend_link, create_cli_parser, install_pdf2djvu, discover_backend, ask_yesno_input
+from calibre_plugins.djvumaker.utils import (create_backend_link, create_cli_parser, install_pdf2djvu,
+                                             discover_backend, ask_yesno_input)
 
 # if iswindows and hasattr(sys, 'frozen'):
 #     # CREATE_NO_WINDOW=0x08 so that no ugly console is popped up
@@ -40,6 +94,8 @@ if (islinux or isbsd or isosx) and getattr(sys, 'frozen', False):
     # popen = partial(subprocess.Popen, shell=True)
 prints = partial(prints, '{}:'.format(PLUGINNAME)) # for easy printing
 
+class EmptyClass():
+    pass
 def empty_function(*args, **kwargs):
     pass
 
@@ -82,6 +138,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         # Set default preferences
         DEFAULT_STORE_VALUES = {}
         DEFAULT_STORE_VALUES['plugin_version'] = PLUGINVER
+        DEFAULT_STORE_VALUES['postimport'] = False
         for item in self.REGISTERED_BACKENDS:
             DEFAULT_STORE_VALUES[item] = {
                 'flags' : [], 'installed' : False, 'version' : None}
@@ -102,9 +159,39 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             for key, val in DEFAULT_STORE_VALUES.iteritems():
                 self.plugin_prefs[key] = val
 
+    def site_customization_parser(self, use_backend):
+        backend, cmdflags = use_backend, self.plugin_prefs[use_backend]['flags']
+        if self.site_customization != '':
+            site_customization = self.site_customization.split()
+            if site_customization[0] in self.REGISTERED_BACKENDS:
+                backend = site_customization[0]
+                cmdflags = site_customization[1:]
+            elif site_customization[0][0] == '-':
+                backend = use_backend
+                cmdflags = site_customization
+                #`--gsarg=-dFirstPage=1,-dLastPage=1` how to limit page range
+                #more gsargs: https://leanpub.com/pdfkungfoo
+            else:
+                # TODO: Custom command implementation
+                #   some template engine with %djvu, %src or sth
+                raise NotImplementedError('Custom commands are not implemented')
+        return backend, cmdflags
+
     def run_backend(self, *args, **kwargs):
         use_backend = self.plugin_prefs['use_backend']
         kwargs['preferences'] = self.plugin_prefs
+        try:
+            use_backend, kwargs['cmdflags'] = self.site_customization_parser(use_backend)
+        except NotImplementedError as err:
+            prints('Error: '+ str(err))
+            prints('Back to not overriden backend settings...')
+            kwargs['cmdflags'] = []
+
+        if 'cmd_creation_only' in kwargs and kwargs['cmd_creation_only']:
+            kwargs.pop('cmd_creation_only')
+            return self.REGISTERED_BACKENDS[use_backend].__wrapped__(*args, **kwargs)
+                #srcdoc, cmdflags, djvu, preferences
+        kwargs.pop('cmd_creation_only', None)
         return self.REGISTERED_BACKENDS[use_backend](*args, **kwargs)
 
     def customization_help(self, gui=True):
@@ -113,11 +200,27 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         # TODO: proper english
         current_backend = self.plugin_prefs['use_backend']
         flags = ''.join(self.plugin_prefs[current_backend]['flags'])
-        command = current_backend + flags
+        command = current_backend + ' ' + flags
+
+        try:
+            overr_backend, overr_flags = self.site_customization_parser(current_backend)
+        except NotImplementedError as err:
+             overriden_info = 'Overriding command is not recognized. {}<br><br>'.format(err.message)
+        else:
+            overr_flags = ''.join(overr_flags)
+            overr_command = overr_backend + ' ' + overr_flags
+            if overr_backend != current_backend or overr_flags != flags:
+                overriden_info = ('This command is overriden by this plugin customization command:'
+                                ' <b>{}</b><br><br>').format(overr_command)
+            else:
+                overriden_info = '<br><br>'
+
         help_command = 'calibre-debug -r djvumaker -- --help'
-        info = ('<p>You can enter overwritting command and flags to create djvu files.<br>'
-                'Currently set command is: <b>{}</b><br><br>'
-                'You can read more about plugin customization running "{}" from command line.</p>').format(command, help_command)
+        info = ('<p>You can enter overwritting command and flags to create djvu files.'
+                'eg: `pdf2djvu -v`. You have to restart calibre before changes can take effect.<br>'
+                'Currently set command is: <b>{}</b><br>'
+                '{}'
+                'You can read more about plugin customization running "{}" from command line.</p>').format(command, overriden_info, help_command)
         return info
 
         # return 'Enter additional `djvudigital --help` command-flags here:'
@@ -200,10 +303,10 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             raise Exception('Backend not recognized.')
 
     def cli_set_backend(self, args):
-        # TODO: add site_customization handling here and delete from other places
         if not args.backend:
             prints('Currently set backend: {}'.format(self.plugin_prefs['use_backend']))
-            sys.exit()
+            return None
+            # sys.exit()
 
         if args.backend in self.REGISTERED_BACKENDS:
             self.plugin_prefs['use_backend'] = args.backend
@@ -212,13 +315,26 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             raise Exception('Backend not recognized.')
         return None
 
+    def cli_set_postimport(self, args):
+        if args.yes:
+            prints('Will try to convert files after import')
+            self.plugin_prefs['postimport'] = True
+        elif args.no:
+            prints('Will not try to convert files after import')
+            self.plugin_prefs['postimport'] = False
+        else:
+            if self.plugin_prefs['postimport']:
+                prints('Currently {} tries to convert PDF files after import'.format(PLUGINNAME))
+            else:
+                prints("Currently {} doesn't do convertion of PDF's after import".format(PLUGINNAME))
+
     def cli_convert(self, args):
         printsd(args)
         if args.all:
             # `calibre-debug -r djvumaker -- convert --all`
             printsd('in cli convert_all')
             # TODO: make work `djvumaker -- convert --all`
-            raise NotImplementedError('Convert all is not implemented.')
+            # raise NotImplementedError('Convert all is not implemented.')
 
             user_input = ask_yesno_input('Do you wany to copy-convert all PDFs to DJVU?')
             if not user_input:
@@ -233,7 +349,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                 # TODO: shouldn't work with this code, db has not atributte run_plugins_on_postimport
                 #       https://github.com/kovidgoyal/calibre/blob/master/src/calibre/customize/ui.py
                 if db.has_format(book_id, 'PDF', index_is_id=True):
-                    db.run_plugins_on_postimport(book_id, 'pdf')
+                    run_plugins_on_postimport(db, book_id, 'pdf')
                     continue
         elif args.path is not None:
             # `calibre-debug -r djvumaker -- convert -p test.pdf` -> tempfile(test.djvu)
@@ -245,7 +361,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                     shutil.copy2(djvu, input_filename + '.djvu')
                     prints("Finished DJVU outputed to: {}.".format(input_filename + '.djvu'))
 
-                    user_input = ask_yesno_input('Do you want to open djvused in subshell? (may not work on not macOS)')
+                    user_input = ask_yesno_input('Do you want to open djvused in subshell?'
+                                                 ' (may not work on not macOS)')
                     if not user_input:
                         return None
                     # de-munge the tty
@@ -260,13 +377,23 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         elif args.id is not None:
             # `calibre-debug -r djvumaker -- convert -i 123 #id(123).pdf` -> tempfile(id(123).djvu)
             printsd('in convert by id')
-            self.postimport(args.id)
+            self._postimport(args.id)
 
     # -- calibre filetype plugin mandatory methods --
     def run(self, path_to_ebook):
         return path_to_ebook # noop
 
-    def postimport(self, book_id, book_format=None, db=None, log=None, fork_job=True, abort=None,
+    # def _postimport(self, book_id, book_format=None, db=None, log=None, fork_job=True, abort=None,
+    #                notifications=None):
+    #     pass
+
+    def postimport(self, book_id, book_format, db):
+        if self.plugin_prefs['postimport']:
+            return self._postimport(book_id, book_format, db)
+        else:
+            return None
+
+    def _postimport(self, book_id, book_format=None, db=None, log=None, fork_job=True, abort=None,
                    notifications=None):
         if log: # divert our printing to the caller's logger
             prints = log # Log object has __call__ dunder method with INFO level
@@ -282,8 +409,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             # if run by cli, i.e.:
             #    calibredb add
             #    calibredebug -r djvumaker -- convert -i #id
-            # runs also for right click if in debug
-            fork_job = False
+            # runs also for GUI if run trough `calibredebug -g`
+            fork_job = False # DEBUG UNCOMMENT
             rpc_refresh = True # use the calibre RPC to signal a GUI refresh
 
         if db is None:
@@ -317,13 +444,6 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             prints(("scheduling new {} document from book ID #{} for post-import DJVU"
                     " conversion: {}").format(book_format, book_id, path_to_ebook))
 
-            cmdflags = []
-            if self.site_customization is not None: cmdflags.extend(self.site_customization.split())
-            # TODO: change site_customization
-
-            #`--gsarg=-dFirstPage=1,-dLastPage=1` how to limit page range
-            #more gsargs: https://leanpub.com/pdfkungfoo
-
         if fork_job:
             #useful for not blocking calibre GUI when large PDFs
             # are dropped into the automatic-import-folder
@@ -336,10 +456,11 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             # note that Calibre bungs the python loader to check the plugin directory when
             # modules with calibre_plugin. prefixed are passed
             # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/customize/zipplugin.py#L192
-                func_name = self.plugin_prefs['Options']['use_backend']
-                jobret = worker_fork_job('calibre_plugins.%s' % self.name, func_name,
-                            args=[path_to_ebook, cmdflags, log],
-                            kwargs={},
+                func_name = self.plugin_prefs['use_backend']
+                args = [path_to_ebook, log, abort, notifications, pages, images]
+                jobret = worker_fork_job('calibre_plugins.{}'.format(PLUGINNAME), func_name,
+                            args= args,
+                            kwargs={'preferences' : self.plugin_prefs},
                             env={'PATH': os.environ['PATH'] + ':/usr/local/bin'},
                             # djvu and poppler-utils on osx
                             timeout=600)
@@ -367,7 +488,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         # we can give it a threadedjob and not use fork_job
         else: #!fork_job & !gui
             prints("Starts backend")
-            djvu = self.run_backend(path_to_ebook, cmdflags, log, abort, notifications, pages,
+            djvu = self.run_backend(path_to_ebook, log, abort, notifications, pages,
                                     images)
 
         if djvu:
@@ -443,17 +564,16 @@ def is_rasterbook(path, basic_return=True):
 
 def job_handler(fun):
     @wraps(fun)
-    def wrapper(srcdoc, cmdflags=None, log=None, abort=None, notifications=None, pages=None,
-                images=None, *args, **kwargs):
+    def wrapper(srcdoc, log=None, abort=None, notifications=None, pages=None,
+                images=None, cmdflags=None, *args, **kwargs):
         '''Wraps around every backend.'''
+        log('In job handler')
         # TODO: better notifications
         if notifications is None:
-            class EmptyClass():
-                pass
             notifications = EmptyClass()
             notifications.put = lambda x : None
         pages = 1 if pages is None else pages
-        images = 1 if images is None else images
+        images = 1 if images is None else images # sometimes it can be None passed as arg, not default
         notifications.put((1/(pages+3),'Launching backend...'))
 
         if cmdflags is None:
@@ -535,6 +655,7 @@ def job_handler(fun):
             if proc.returncode != 0:
                 return False # 10 djvudigital shell/usage error
             return djvu.name
+    wrapper.__wrapped__ = fun # backporting python3 feature
     return wrapper
 
 # -- DJVU conversion utilities wrapper functions -- see
@@ -578,9 +699,13 @@ def pdf2djvu(srcdoc, cmdflags, djvu, preferences):
     pdf2djvu_path, _, _, _ = discover_backend('pdf2djvu', preferences, PLUGINNAME)
     if pdf2djvu_path is None:
         raise OSError('pdf2djvu not found')
+    if djvu is None:
+        djvu = EmptyClass()
+        djvu.name, _ = os.path.splitext(srcdoc)
+        djvu.name += '.djvu'
     # DEBUG DEL:
     # return [pdf2djvu_path, '-v', '-o', djvu.name, srcdoc] # verbose
-    return [pdf2djvu_path, '-o', djvu.name, srcdoc]
+    return [pdf2djvu_path] + cmdflags + ['-o', djvu.name, srcdoc]
 
 @DJVUmaker.register_backend
 @job_handler
