@@ -1,5 +1,21 @@
-from __future__ import (unicode_literals, division, absolute_import,
-                        print_function)
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+GUI module for Calibre plugin djvumaker - add menu item to GUI, start conversion from GUI
+
+References:
+(#NODOC)
+--- CLI ---
+ConvertToDJVUAction(InterfaceAction)
+  .genesis(self)
+  .initialization_complete(self)
+  .location_selected(self, loc)
+  .convert_book(self, triggered)
+  ._convert_books(self, rows)
+  ._tjob_djvu_convert(self, db, book_id, fpath, ftype, abort, log, notifications)
+  ._tjob_refresh_books(self, job)
+"""
+from __future__ import unicode_literals, division, absolute_import, print_function
 
 import sys
 from functools import partial
@@ -29,10 +45,12 @@ class ConvertToDJVUAction(InterfaceAction):
                              'context-menu-cover-browser'])
 
     def genesis(self):
+        #NODOC
         self.qaction.triggered.connect(self.convert_book)
 
     # def gui_layout_complete(self):
     def initialization_complete(self):
+        #NODOC
         # append my top-level DJVU action to the built-in conversion menus
         # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/actions/convert.py
         # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/gui2/__init__.py#L26
@@ -43,15 +61,18 @@ class ConvertToDJVUAction(InterfaceAction):
         cb.qaction.setMenu(cb.qaction.menu())
 
     def location_selected(self, loc):
+        #NODOC
         # Currently values for loc are: ``library, main, card and cardb``.
         enabled = loc == 'library'
         self.qaction.setEnabled(enabled)
 
     def convert_book(self, triggered):
+        #NODOC
         rows = self.gui.current_view().selectionModel().selectedRows()
         self._convert_books(rows)
 
     def _convert_books(self, rows):
+        #NODOC
         db = self.gui.current_db
         if not rows or len(rows) == 0:
             return error_dialog(self.gui, _('Cannot convert'),
@@ -72,7 +93,8 @@ class ConvertToDJVUAction(InterfaceAction):
                                       callback=self._tjob_refresh_books)
                     # there is an assumed log=GUILog() ! src/calibre/utils/logging.py
                     self.gui.job_manager.run_threaded_job(job)
-                    # too bad console utils and filetype plugins can't start a jobmanager..fork_job is a wretch
+                    # too bad console utils and filetype plugins can't start a jobmanager..fork_job is
+                    #   a wretch
         else: # !gui_library
         # looking at a device's flash contents or some other non-library store,
         # filepaths here are not to be tracked in the db
@@ -86,16 +108,19 @@ class ConvertToDJVUAction(InterfaceAction):
                 self.gui.job_manager.run_threaded_job(job)
 
     def _tjob_djvu_convert(self, db, book_id, fpath, ftype, abort, log, notifications):
+        #NODOC
         if book_id:
             find_plugin('djvumaker')._postimport(book_id, ftype, db, log, fork_job=False,
                                                 abort=abort, notifications=notifications)
         elif fpath:
             # TODO: proper english
-            raise NotImplementedError('Connot convert book outside of library. Add book to your library and then start convert.')
+            raise NotImplementedError('Connot convert book outside of library.'
+                                      ' Add book to your library and then start conversion.')
             # TODO: Add ability to convert on devices; unknow keywords `path` and `flags`?
             # find_plugin('djvumaker').djvudigital(path, flags, None)
 
     def _tjob_refresh_books(self, job):
+        #NODOC
         book_id = job.args[1]
         # self.gui.iactions['Edit Metadata'].refresh_gui([book_id], covers_changed=False)
         self.gui.library_view.model().refresh_ids([book_id])

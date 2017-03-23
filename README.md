@@ -11,7 +11,7 @@ Big 100+ page books scanned into PDF format usually slow these devices' built-in
 
 To read DJVU files on the Kindle, I suggest koreader/koreader.
 
-PDF is still better for vector/markup based "ebooks" so this plugin will not try to convert documents it detects having less than 1 raster image per page.  
+PDF is still better for vector/markup based "ebooks" so this plugin will not try to convert documents it detects having less than 1 raster image per page.
 
 Installation
 ---
@@ -24,7 +24,7 @@ Installation
    ```
 2. [Required] Build the conversion programs (**fixme: works only on macOS**, check next section for solution)\
     ```calibre-debug -R djvumaker -- backend install djvudigital```
-3. (Re)start Calibre and start converting your PDF books!  
+3. (Re)start Calibre and start converting your PDF books!
 
 4. [Optional] go to Preferences -> Interface::Toolbars so you can place the DJVU menu where you see fit.
 
@@ -45,16 +45,44 @@ The main diferences betwent pdf2djvu and djvudigital are listed [here](https://g
 
 Under the Hood
 ---
-There are a few implementations of DjVU tools in the wild, but the fastest and most robust free one is the DjVuLibre suite and its Ghostscript plugin "GsDjvu".  
-GsDjvu was witlessly licensed by AT&T with a "free" but GPL-incompatible license which makes pre-compiled packages impossible to publically distribute.  
+There are a few implementations of DjVU tools in the wild, but the fastest and most robust free one is the DjVuLibre suite and its Ghostscript plugin "GsDjvu".
+GsDjvu was witlessly licensed by AT&T with a "free" but GPL-incompatible license which makes pre-compiled packages impossible to publically distribute.
 Therefore both packages must be built by the user in a complicated procedure, which the plugin tries to facilitate when installed into Calibre.
 
 
 Q: Why not write a "standard" Conversion Plugin for DjVU?
 ---
-Calibre's conversion API currently supports two pipelines:  
-1. markup-based ebooks (book.xfmt > book.OEB > book.yfmt): useless for working on image-based scans.  
-2. comic books (*.cbz): unusably slow for library books due to its over-reliance on Python for its transform pipeline.  
+Calibre's conversion API currently supports two pipelines:
+1. markup-based ebooks (book.xfmt > book.OEB > book.yfmt): useless for working on image-based scans.
+2. comic books (*.cbz): unusably slow for library books due to its over-reliance on Python for its transform pipeline.
 
-Only ghostscript+gsdjvu delivers usable conversion times for large scanned books.  
-Patching Calibre's conversion API to add a 3rd pipeline to support them would be far more involved than this sub-500-line plugin (excluding these explanations :-).  
+Only ghostscript+gsdjvu delivers usable conversion times for large scanned books.
+Patching Calibre's conversion API to add a 3rd pipeline to support them would be far more involved than this sub-500-line plugin (excluding these explanations :-).
+
+CLI
+---
+```
+usage: calibre-debug -r djvumaker --  [-h] [-V] command ...
+positional arguments:
+  command
+    backend       Backends handling.
+      {install,set}           installs or sets backend
+      {pdf2djvu,djvudigital}  choosed backend
+
+    convert       Convert file to djvu.
+      -p PATH, --path PATH  convert file under PATH to djvu using default settings
+      -i ID, --id ID        convert file with ID to djvu using default settings
+      --all                 convert all pdf files in calibre's library, you have to turn on postimport
+                                conversion first, works for every backend
+
+    postimport    Change postimport settings
+      -y, --yes     sets plugin to convert PDF files after import (do not work for pdf2djvu)
+      -n, --no      sets plugin to do not convert PDF files after import (default)
+
+    install_deps  (depreciated) alias for `calibre-debug -r djvumaker -- backend install djvudigital`
+    convert_all   (depreciated) alias for `calibre-debug -r djvumaker -- convert --all`
+
+optional arguments:
+  -h, --help     show help message and exit
+  -V, --version  show plugin's version number and exit
+```

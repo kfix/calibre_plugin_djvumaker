@@ -1,19 +1,46 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import (unicode_literals, division, absolute_import,
-                        print_function)
+"""
+utils module for Calibre plugin djvumaker - CLI setup, pdf2djvu installation, and utility methods
+
+References:
+(#NODOC)
+--- CLI ---
+create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACKENDS_KEYS)
+ask_yesno_input(question, prints=print)
+printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█',
+                 prints=print)
+
+--- pdf2djvu installation ---
+version_str_to_intlist(verstr)
+version_intlist_to_str(verintlist)
+version_from_output(output)
+check_version_executable(executable_path)
+create_backend_link(backend_name, version)
+install_pdf2djvu(PLUGINNAME, preferences, log=print)
+get_url_basename(url)
+download_pdf2djvu(web_version, log)
+unpack_zip_or_tar(PLUGINNAME, fpath, log)
+
+--- utility functions ---
+EmptyClass()
+empty_function(*args, **kwargs)
+add_method_dec(method, method_name)
+discover_backend(backend_name, preferences, folder)
+"""
+from __future__ import unicode_literals, division, absolute_import, print_function
+
 import argparse
+import os
 import urllib
 import urllib2
 import urlparse
-import os
-# import os.path
 import subprocess
 
-from calibre.constants import (isosx, iswindows, islinux, isbsd)
+from calibre.constants import isosx, iswindows, islinux, isbsd
 
 def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACKENDS_KEYS):
-    '''Creates CLI for plugin.'''
+    """Creates CLI for plugin."""
     # TODO: add message before and after printing help
     # TODO: add information in cli about current installation and setting and overriding by
     #       customization help
@@ -41,7 +68,9 @@ def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACK
     group_convert.add_argument('-i', "--id",
                                 help="convert file with ID to djvu using default settings",
                                 action="store", type=int)
-    group_convert.add_argument("--all", help="convert all pdf files in calibre's library, you have to turn on postimport conversion first (`calibre-debug -r djvumaker -- postimport -y`)",
+    group_convert.add_argument("--all", help=("convert all pdf files in calibre's library, you have to"
+                                              " turn on postimport conversion first (`calibre-debug -r"
+                                              " djvumaker -- postimport -y`)"),
                                 action="store_true")
 
     parser_postimport = subparsers.add_parser('postimport', help='change postimport settings')
@@ -66,21 +95,22 @@ def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACK
 
 
 def version_str_to_intlist(verstr):
-    '''Conversion from 'x.y.z' to [x, y, z] version format.'''
+    """Conversion from 'x.y.z' to [x, y, z] version format."""
     return [int(x) for x in verstr.split('.')]
 def version_intlist_to_str(verintlist):
-    '''Conversion from [x, y, z] to 'x.y.z' version format.'''
+    """Conversion from [x, y, z] to 'x.y.z' version format."""
     return '.'.join(map(str,verintlist))
 
 def version_from_output(output):
-    '''Extracts version number from typical pdf2djvu --version output.'''
+    """Extracts version number from typical pdf2djvu --version output."""
     return output.splitlines()[0].split()[1]
 def check_version_executable(executable_path):
+    #NODOC
     return version_from_output(subprocess.check_output([executable_path, '--version'],
         stderr= subprocess.STDOUT))
 
 def discover_backend(backend_name, preferences, folder):
-    '''
+    """
     Discovers backend locations and versions. Currently works only for pdf2djvu.
     Assumes folder structure and existence of backend cli flag --version,
     with output in specific format.
@@ -104,7 +134,7 @@ def discover_backend(backend_name, preferences, folder):
         4. version_under_path      - version of executable under PATH
     backend_path links to first found version during checks. If it's not found it takes None value.
     If there is no valid version under value 2, 3 or 4, this value is None.
-    '''
+    """
     # Check 1:
     backend_path = None
     saved_version = preferences[backend_name]['version']
@@ -142,13 +172,15 @@ def discover_backend(backend_name, preferences, folder):
     return backend_path, saved_version, best_installed_version, version_under_path
 
 def create_backend_link(backend_name, version):
+    #NODOC
     return os.path.join(os.path.join('djvumaker', '{}-{}'.format(backend_name, version), backend_name))
 
-# DEBUG TODO:
+# TODO:
 # class Installer_pdf2djvu(Installer):
 #     pass
 
 def install_pdf2djvu(PLUGINNAME, preferences, log=print):
+    #NODOC
     backend_path, saved_version, installed_version, path_version = discover_backend('pdf2djvu',
         preferences, PLUGINNAME)
     log("DEBUG: ", (backend_path, saved_version, installed_version, path_version))
@@ -173,11 +205,11 @@ def install_pdf2djvu(PLUGINNAME, preferences, log=print):
 
     log("Checking pdf2djvu's author page for current relase...")
     github_latest_url = r'https://github.com/jwilk/pdf2djvu/releases/latest'
-    # DEBUG UN
+    # DEBUG UNCOMMENT
     github_page = urllib2.urlopen(github_latest_url)
     web_version = get_url_basename(github_page.geturl())
 
-    # DEBUG DEL
+    # DEBUG COMMENT
     # web_version = '0.9.5'
     # local_version = None
 
@@ -237,12 +269,16 @@ def install_pdf2djvu(PLUGINNAME, preferences, log=print):
         raise Exception("Newer local version than current pdf2djvu found.")
 
 def get_url_basename(url):
+    #NODOC
     return os.path.basename(urlparse.urlsplit(url).path)
 
 def download_pdf2djvu(web_version, log):
+    #NODOC
     def gen_zip_url(code):
+        #NODOC
         return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-win32-{}.zip'.format(code, code)
     def gen_tar_url(code):
+        #NODOC
         return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-{}.tar.xz'.format(code, code)
 
     # TODO: what with fallback!?! new argument
@@ -255,8 +291,8 @@ def download_pdf2djvu(web_version, log):
         arch_url = gen_tar_url(web_version)
 
     def download_progress_bar(i, chunk, full):
-        ''''args: a count of blocks transferred so far,
-        a block size in bytes, and the total size of the file'''
+        """'args: a count of blocks transferred so far,
+        a block size in bytes, and the total size of the file"""
         printProgressBar(i*chunk, full, prefix = '\tProgress:', suffix = 'Complete',
                          length=50, prints=print)
 
@@ -291,7 +327,8 @@ def download_pdf2djvu(web_version, log):
     return fpath
 
 def unpack_zip_or_tar(PLUGINNAME, fpath, log):
-    # DEBUG
+    #NODOC
+    # DEBUG COMMENT
     # log(fpath)
     log('Extracting now...')
     if iswindows:
@@ -302,14 +339,15 @@ def unpack_zip_or_tar(PLUGINNAME, fpath, log):
         # Python 2.7 Standard Library cannot unpack tar.xz archive, do this manually or through shell
         # it can not work on macOS
         subprocess.call(['tar', 'xf', fpath, '-C', os.path.dirname(fpath)])
-        # DEBUG TODO: you have to make it still...
-        # deosn't work for linux or mac then
+        # TODO: you have to make it still...
+        # doesn't work for linux or mac then
     log('Extracted downloaded archive')
     os.remove(fpath)
     log('Removed downloaded archive')
 
 # Print iterations progress
-def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', prints=print):
+def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█',
+                     prints=print):
     """
     source: http://stackoverflow.com/a/34325723/2351523
     Call in a loop to create terminal progress bar
@@ -331,7 +369,7 @@ def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, l
         prints()
 
 def ask_yesno_input(question, prints=print):
-    '''Ask user for yes/no input. Loops if other answer.'''
+    """Ask user for yes/no input. Loops if other answer."""
     while True:
         prints('\n\t'+ question + ' (y/n)\n')
         user_input = raw_input().strip().lower()
@@ -341,3 +379,15 @@ def ask_yesno_input(question, prints=print):
             return False
         else:
             prints("Your input is not 'y' or 'n'.")
+
+class EmptyClass():
+    pass
+def empty_function(*args, **kwargs):
+    pass
+
+def add_method_dec(obj, name):
+    """Decorate `fun`, add `obj` as attribute with name `name` to `fun`"""
+    def inner(fun):
+        setattr(fun, name, obj)
+        return fun
+    return inner
