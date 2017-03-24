@@ -69,7 +69,7 @@ Main problems during development:
 
 Conversion can be started through:
 * right click in GUI menu in library:
-            gui.py:#NODOC:ConvertToDJVUAction.initialization_complete ->
+           gui.py:#NODOC:ConvertToDJVUAction.initialization_complete ->
     ->     gui.py:#NODOC:ConvertToDJVUAction.convert_book ->
     ->     gui.py:#NODOC:ConvertToDJVUAction._convert_books ->
     ->     gui.py:#NODOC:ConvertToDJVUAction._tjob_djvu_convert ->
@@ -79,9 +79,9 @@ Conversion can be started through:
     ->__init__.py:#NODOC:register_backend ->
     ->__init__.py:#NODOC:job_handler ->
     ->__init__.py:#NODOC:{pdf2djvu//djvudigital}
-* right click in GUI menu in library:
+* right click in GUI menu in library-like view on device:
     (currently NotImplemented)
-            gui.py:#NODOC:find_plugin('djvumaker').??? -> ???
+      ...->gui.py:#NODOC:ConvertToDJVUAction._tjob_djvu_convert||elif fpath -> ???
 * through postimport conversion during GUI
     __init__.py:#NODOC:DJVUPlugin.postimport ->
     ->__init__.py:#NODOC:DJVUPlugin._postimport ->
@@ -230,7 +230,8 @@ Main TODOs:
 * (M-H) pdf2djvu doesn't work for postimport
 * (H) plugin settings QT widget
 * (H) make general overhaul of starting conversion logic
-* (H) add support for conversion from other docs
+* (H) add support for conversion from other formats
+#NODOC - more todos
 """
 from __future__ import unicode_literals, division, absolute_import, print_function
 
@@ -438,6 +439,16 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
 
     def cli_install_backend(self, args):
         #NODOC
+        # def brew_install(args, name):
+        #     #NODOC
+        #     joined = ' '.join(args)
+        #     if os.system("which brew >/dev/null") == 0:
+        #             if ask_yesno_input("Install {} from brew with args: '{}'?".format(name, joined)):
+        #             os.system("brew {}".format(joined))
+        #         else:
+        #             raise Exception("Homebrew required."
+        #                             "Please visit http://github.com/Homebrew/homebrew")
+
         printsd('cli_install_backend enter: args.backend:', args.backend)
         if not args.backend: # Report currently installed backends if without args
             installed_backend = [k for k, v in {
@@ -449,6 +460,10 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
 
         if args.backend == 'djvudigital':
             if isosx:
+                # brew_install(["install", "--with-djvu", "ghostscript"], "ghostscript")
+                # brew_install(["install", "caskroom/cask/brew-cask"], "brew-cask")
+                # brew_install(["cask", "install", "djview"], "DjView.app")
+
                 if os.system("which brew >/dev/null") == 0:
                     os.system("brew install --with-djvu ghostscript")
                 else:
@@ -474,7 +489,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             if iswindows:
                 success, version = install_pdf2djvu(PLUGINNAME, self.plugin_prefs, log=prints)
             elif isosx: raise Exception(err_info)
-            elif islinux: raise Exception(err_info)
+            elif islinux: raise Exception(err_info + ' Can work: `sudo apt-get install pdf2djvu` or your distro equivalent.')
             elif isbsd: raise Exception(err_info)
             else: raise Exception(err_info)
             # TODO: very easy: add support for macOS and linux, just add `make` after download source
@@ -483,6 +498,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
             # TODO: give flag where to installed_backend
             # TODO: ask if add to path?
             # TODO: should use github api v3
+            #       https://developer.github.com/v3/repos/releases/
+            #       https://developer.github.com/libraries/
             if success:
                 self.plugin_prefs['pdf2djvu']['installed'] = True
                 self.plugin_prefs['pdf2djvu']['version'] = version
@@ -702,7 +719,8 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
                     prints("signalled Calibre GUI refresh")
         else:
             # TODO: normal Exception propagation instead of passing errors as return values
-            raise Exception('ConversionError, djvu: {}'.format(djvu))
+            raise Exception(('ConversionError, djvu: {}. Did you install any backend according to the'
+                             ' documentation?').format(djvu))
 
 def is_rasterbook(path, basic_return=True):
     """
@@ -737,6 +755,8 @@ def is_rasterbook(path, basic_return=True):
         # Error: A NULL handle was passed, but initialized data was expected.
         # It's probably a bug in calibre podofo image_count method:
         # https://github.com/kovidgoyal/calibre/blob/master/src/calibre/utils/podofo/doc.cpp#L146
+        #
+        # This is not a big concern because raises mostly for heavy image PDFs
         images = pdf.image_count()
     except:
         import inspect

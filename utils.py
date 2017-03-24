@@ -336,10 +336,11 @@ def unpack_zip_or_tar(PLUGINNAME, fpath, log):
         with ZipFile(fpath, 'r') as myzip:
             myzip.extractall(os.path.dirname(fpath))
     else:
-        # Python 2.7 Standard Library cannot unpack tar.xz archive, do this manually or through shell
-        # it can not work on macOS
-        subprocess.call(['tar', 'xf', fpath, '-C', os.path.dirname(fpath)])
-        # TODO: you have to make it still...
+        raise NotImplementedError('Python 2.7 Standard Library cannot unpack tar.xz archives, do this manually or through shell.')
+        # it may not not work for macOS:
+        # subprocess.call(['tar', 'xf', fpath, '-C', os.path.dirname(fpath)])
+        # TODO: you have to make it still..., with sth like:
+        # subprocess.call(['make'])
         # doesn't work for linux or mac then
     log('Extracted downloaded archive')
     os.remove(fpath)

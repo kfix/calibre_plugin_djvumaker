@@ -22,8 +22,8 @@ Installation
    cd calibre_plugin_djvumaker
    calibre-customize -b ./
    ```
-2. [Required] Build the conversion programs (**fixme: works only on macOS**, check next section for solution)\
-    ```calibre-debug -R djvumaker -- backend install djvudigital```
+2. [Required] Build the conversion programs (**fixme: works only on macOS**, check next section for solution for other systems)\
+    ```calibre-debug -r djvumaker -- backend install djvudigital```
 3. (Re)start Calibre and start converting your PDF books!
 
 4. [Optional] go to Preferences -> Interface::Toolbars so you can place the DJVU menu where you see fit.
@@ -31,15 +31,15 @@ Installation
 Installation of secondary backend
 ---
 For all having troubles with building GsDjvu there is possibility to install secondary backend - [pdf2djvu](http://jwilk.net/software/pdf2djvu).
-The "pdf2djvu" is a pdf to djvu converter developed by Jakub Wilk ([GitHub](https://github.com/jwilk/pdf2djvu)).
-Although slower than djvudigital it's installation is much simplier. There is also a posibility to install it through *this* plugin:
+The *pdf2djvu* is a pdf to djvu converter developed by Jakub Wilk ([GitHub](https://github.com/jwilk/pdf2djvu)).
+Although produces less compresed files than djvudigital it's installation is much simplier. For Windows (**fixme: works only on Windows**) there is also a posibility to install it through *this* plugin:
 ```bash
-calibre-debug -R djvumaker -- backend install pdf2djvu #(should work for any OS)
-calibre-debug -R djvumaker -- backend set pdf2djvu
+calibre-debug -r djvumaker -- backend install pdf2djvu
+calibre-debug -r djvumaker -- backend set pdf2djvu
 ```
 
 Also you can just add pdf2djvu to your path and:
-```calibre-debug -R djvumaker -- backend set pdf2djvu```
+```calibre-debug -r djvumaker -- backend set pdf2djvu```
 
 The main diferences betwent pdf2djvu and djvudigital are listed [here](https://github.com/jwilk/pdf2djvu/blob/master/doc/djvudigital.txt).
 
