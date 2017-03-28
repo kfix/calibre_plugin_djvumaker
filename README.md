@@ -28,7 +28,7 @@ Installation
 
 4. [Optional] go to Preferences -> Interface::Toolbars so you can place the DJVU menu where you see fit.
 
-Installation of secondary backend
+Installation of pdf2djvu backend
 ---
 For all having troubles with building GsDjvu there is possibility to install secondary backend - [pdf2djvu](http://jwilk.net/software/pdf2djvu).
 The *pdf2djvu* is a pdf to djvu converter developed by Jakub Wilk ([GitHub](https://github.com/jwilk/pdf2djvu)).
@@ -76,7 +76,7 @@ positional arguments:
                                 conversion first, works for every backend
 
     postimport    Change postimport settings
-      -y, --yes     sets plugin to convert PDF files after import (do not work for pdf2djvu)
+      -y, --yes     sets plugin to convert PDF files after import (sometimes do not work for pdf2djvu)
       -n, --no      sets plugin to do not convert PDF files after import (default)
 
     install_deps  (depreciated) alias for `calibre-debug -r djvumaker -- backend install djvudigital`

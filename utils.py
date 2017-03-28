@@ -38,6 +38,7 @@ import urlparse
 import subprocess
 
 from calibre.constants import isosx, iswindows, islinux, isbsd
+from calibre.utils.config import config_dir
 
 def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACKENDS_KEYS):
     """Creates CLI for plugin."""
@@ -48,8 +49,10 @@ def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACK
     parser.add_argument('-V', '--version', action='version', version='v{}'.format(PLUGINVER_DOT),
                         help="show plugin's version number and exit")
     subparsers = parser.add_subparsers(metavar='command')
-    parser_test = subparsers.add_parser('test')
-    parser_test.set_defaults(func=self_DJVUmaker.cli_test)
+
+    # DEBUG COMMENT
+    # parser_test = subparsers.add_parser('test')
+    # parser_test.set_defaults(func=self_DJVUmaker.cli_test)
 
     parser_backend = subparsers.add_parser('backend', help='Backends handling. See '
                                             '`{}backend --help`'.format(parser.prog))
@@ -78,7 +81,7 @@ def create_cli_parser(self_DJVUmaker, PLUGINNAME, PLUGINVER_DOT, REGISTERED_BACK
     group_postimport = parser_postimport.add_mutually_exclusive_group(required=False)
     group_postimport.add_argument('-y', "--yes",
                                 help=("sets plugin to convert PDF files after import"
-                                      " (do not work for pdf2djvu)"),
+                                      " (sometimes do not work for pdf2djvu)"),
                                 action="store_true")
     group_postimport.add_argument('-n', "--no",
                                 help="sets plugin to do not convert PDF files after import (default)",
@@ -120,8 +123,8 @@ def discover_backend(backend_name, preferences, folder):
         it's updates preferences to recognize this issue (set's value of version to None).
 
     Checks:
-        1. Under djvumaker/{backend_name}-{saved_installed_version}/{backend_name}
-        2. Under djvumaker/{backend_name}-{other_versions}/{backend_name}
+        1. Under CALIBRE's_config_dir/plugin/djvumaker/{backend_name}-{saved_installed_version}/{backend_name}
+        2. Under CALIBRE's_config_dir/plugin/djvumaker/{backend_name}-{other_versions}/{backend_name}
         3. Under {backend_name} (it works if backend_name is on PATH ENV)
 
     Return values:
@@ -173,7 +176,7 @@ def discover_backend(backend_name, preferences, folder):
 
 def create_backend_link(backend_name, version):
     #NODOC
-    return os.path.join(os.path.join('djvumaker', '{}-{}'.format(backend_name, version), backend_name))
+    return os.path.join(os.path.join(plugin_dir('djvumaker'), '{}-{}'.format(backend_name, version), backend_name))
 
 # TODO:
 # class Installer_pdf2djvu(Installer):
@@ -182,8 +185,9 @@ def create_backend_link(backend_name, version):
 def install_pdf2djvu(PLUGINNAME, preferences, log=print):
     #NODOC
     backend_path, saved_version, installed_version, path_version = discover_backend('pdf2djvu',
-        preferences, PLUGINNAME)
-    log("DEBUG: ", (backend_path, saved_version, installed_version, path_version))
+        preferences, plugin_dir(PLUGINNAME))
+    # DEBUG COMMENT
+    # log("DEBUG: ", (backend_path, saved_version, installed_version, path_version))
 
     local_version = None
     if saved_version is None and installed_version is None:
@@ -282,6 +286,8 @@ def download_pdf2djvu(web_version, log):
         return r'https://github.com/jwilk/pdf2djvu/releases/download/{}/pdf2djvu-{}.tar.xz'.format(code, code)
 
     # TODO: what with fallback!?! new argument
+    # TODO: cross import
+    PLUGINNAME = 'djvumaker'
     fallback_version = '0.9.5'
     if iswindows:
         fallback_arch_url = gen_zip_url(fallback_version)
@@ -307,16 +313,16 @@ def download_pdf2djvu(web_version, log):
                 )
 
     log('Downloading current version of pdf2djvu...')
-    if not os.path.isdir('djvumaker'):
-        os.mkdir('djvumaker')
-    fpath, msg = urllib.urlretrieve(arch_url, os.path.join('.', 'djvumaker', get_url_basename(arch_url)),
+    if not os.path.isdir(plugin_dir(PLUGINNAME)):
+        os.mkdir(plugin_dir(PLUGINNAME))
+    fpath, msg = urllib.urlretrieve(arch_url, os.path.join(plugin_dir(PLUGINNAME), get_url_basename(arch_url)),
                                     download_progress_bar)
     # print() # should progess bar function handle this TODO:
     if not check_msg(fpath, msg):
         log('Cannot download current version {} from GitHub.'.format(web_version))
         if web_version != fallback_version:
             log('Trying download version {}...'.format(fallback_version), download_progress_bar)
-            fpath, msg_fallback = urllib.urlretrieve(fallback_arch_url, os.path.join('.','djvumaker',
+            fpath, msg_fallback = urllib.urlretrieve(fallback_arch_url, os.path.join(plugin_dir(PLUGINNAME),
                                                      get_url_basename(fallback_arch_url)),
                                                      download_progress_bar)
             # print() # should progess bar function handle this TODO:
@@ -347,7 +353,7 @@ def unpack_zip_or_tar(PLUGINNAME, fpath, log):
     log('Removed downloaded archive')
 
 # Print iterations progress
-def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█',
+def printProgressBar(iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '=',
                      prints=print):
     """
     source: http://stackoverflow.com/a/34325723/2351523
@@ -392,3 +398,6 @@ def add_method_dec(obj, name):
         setattr(fun, name, obj)
         return fun
     return inner
+
+def plugin_dir(plugin_name):
+    return os.path.join(config_dir, 'plugins', plugin_name)
