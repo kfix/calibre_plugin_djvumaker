@@ -602,7 +602,7 @@ class DJVUmaker(FileTypePlugin, InterfaceActionBase): # multiple inheritance for
         elif args.id is not None:
             # `calibre-debug -r djvumaker -- convert -i 123 #id(123).pdf` -> tempfile(id(123).djvu)
             printsd('in convert by id')
-            self._postimport(args.id)
+            self._postimport(args.id, fork_job=False)
 
     # -- calibre filetype plugin mandatory methods --
     def run(self, path_to_ebook):
