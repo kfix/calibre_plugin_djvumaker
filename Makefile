@@ -8,7 +8,7 @@ USER := kfix
 PLUGIN := djvumaker
 REPO := calibre_plugin_djvumaker
 ZIP := $(PLUGIN).zip
-	
+
 GH_RELEASE_JSON = '{"tag_name": "v$(VERSION)","target_commitish": "master","name": "v$(VERSION)","body": "calibre plugin of version $(VERSION)","draft": false,"prerelease": false}'
 
 all: clean release
@@ -37,6 +37,6 @@ clean:
 
 test: $(ZIP)
 	calibre-customize -a $(ZIP)
-	calibre-debug -r djvumaker test.pdf
+	calibre-debug -r djvumaker -- convert -p test.pdf
 
 .PHONY: clean tag release all test
